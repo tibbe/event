@@ -1,16 +1,25 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
-
 module System.Event.Internal where
 
 import Foreign.C.Types (CInt)
-import Foreign.Ptr (Ptr)
 
-newtype EvLoop = EvLoop ()
+-- | An I/O event.
+data Event = Read   -- ^ The file descriptor is ready for reading
+           | Write  -- ^ The file descriptor is ready for writing
 
-newtype EvIO = EvIO ()
+-- | Event notification backend.
+class Backend a where
+    -- | Create a new backend.
+    new :: IO a
 
-foreign import ccall unsafe "ev.h ev_default_loop"
-    c_ev_default_loop :: CInt -> IO (Ptr EvLoop)
+    -- | Poll backend for new events.  The provide callback is called
+    -- once per file descriptor with new events.
+    poll :: a
+         -> (CInt -> [Event] -> IO ())  -- Callback
+         -> IO ()
 
-foreign import ccall unsafe "ev.h ev_io_init"
-    c_ev_io_init :: Ptr EvIO -> Ptr () -> CInt -> CInt -> IO ()
+    -- | Register interest in the given events on the given file
+    -- descriptor.
+    set :: a
+        -> CInt     -- File descriptor
+        -> [Event]  -- Events to watch for
+        -> IO ()
