@@ -28,7 +28,7 @@ import qualified System.Event.Vector as V
 ------------------------------------------------------------------------
 -- Types
 
--- | Vector of callbacks indexed by the file descriptor.
+-- | Vector of callbacks indexed by file descriptor.
 type Callbacks = V.Vector RealWorld ([Event] -> IO ())
 
 -- | The event loop state.
@@ -60,8 +60,8 @@ loop (EventLoop be cbs) = loop'
 -- | Callback invoked on I/O events.
 type Callback = [Event] -> IO ()
 
--- | @set el cb fd dvs@ registers interest in the events @evs@ on the
--- file descriptor @fd@.  When events occur @cb@ is called.
+-- | @set el cb fd evs@ registers interest in the events @evs@ on the
+-- file descriptor @fd@.  @cb@ is called for each event that occurs.
 set :: EventLoop -> Callback -> CInt -> [Event] -> IO ()
 set (EventLoop be fds) cb fd evs = do
     stToIO $ do V.reserve fds (fromIntegral $ fd - 1)

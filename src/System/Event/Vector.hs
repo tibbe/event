@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, MagicHash, UnboxedTuples #-}
 
--- | This module is intended to be imported qualified, to avoid name
+-- | This module is intended to be imported qualified to avoid name
 -- clashes with @Prelude@ functions, e.g.
 --
 -- > import qualified System.Event.Vector as V
@@ -40,7 +40,7 @@ import GHC.ST (ST(..))
 ------------------------------------------------------------------------
 -- Types
 
--- | A mutable, dynamic array type for use in the @ST@ monad.
+-- | A mutable, dynamic array type for use in the 'ST' monad.
 newtype Vector s a = Vector (STRef s (C s a))
 
 -- The actual array contents.
@@ -183,4 +183,3 @@ check func c@(C _ _ len) i f
     | i >= 0 && i < len = f c i
     | otherwise = moduleError func "index out of bounds"
 {-# INLINE check #-}
-
