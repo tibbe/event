@@ -14,15 +14,23 @@ cabal-version:       >= 1.6
 
 library
   exposed-modules:
-    System.Event.Internal
+    System.Event
+
+  other-modules:
+    System.Event.Array,
+    System.Event.Internal,
+    System.Event.KQueue,
+    System.Event.Vector
 
   build-depends:
-    base < 4.1
+    array,
+    base < 4.1,
+    ghc-prim,
+    unix
 
-  extensions: CPP, ForeignFunctionInterface
-  ghc-options: -Wall
+  extensions: CPP, ForeignFunctionInterface, MagicHash, UnboxedTuples
+  ghc-options: -Wall -funbox-strict-fields
   if impl(ghc >= 6.8)
     ghc-options: -fwarn-tabs
 
   hs-source-dirs: src
-  extra-libraries: ev
