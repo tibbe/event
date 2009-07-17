@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification, ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ExistentialQuantification, ForeignFunctionInterface #-}
 
 module System.Event
     ( -- * Types
@@ -22,13 +22,18 @@ import Foreign.C.Types (CInt)
 import System.Event.Internal (Backend, Event(..))
 
 import qualified System.Event.Internal as I
-import qualified System.Event.KQueue as KQueue
 import qualified System.Event.Vector as V
+
+#ifdef BACKEND_KQUEUE
+import qualified System.Event.KQueue as KQueue
+#else
+# error not implemented for this operating system
+#endif
 
 ------------------------------------------------------------------------
 -- Types
 
--- | Vector of callbacks indexed by the file descriptor.
+-- | Vector of callbacks indexed by file descriptor.
 type Callbacks = V.Vector RealWorld ([Event] -> IO ())
 
 -- | The event loop state.
@@ -42,7 +47,9 @@ data EventLoop = forall a. Backend a => EventLoop
 -- | Create a new event loop.
 new :: IO EventLoop
 new = do
+#ifdef BACKEND_KQUEUE
     be <- KQueue.new  -- TODO: Detect backend to use.
+#endif
     cbs <- stToIO $ V.empty
     return $ EventLoop be cbs
 
@@ -60,8 +67,8 @@ loop (EventLoop be cbs) = loop'
 -- | Callback invoked on I/O events.
 type Callback = [Event] -> IO ()
 
--- | @set el cb fd dvs@ registers interest in the events @evs@ on the
--- file descriptor @fd@.  When events occur @cb@ is called.
+-- | @set el cb fd evs@ registers interest in the events @evs@ on the
+-- file descriptor @fd@.  @cb@ is called for each event that occurs.
 set :: EventLoop -> Callback -> CInt -> [Event] -> IO ()
 set (EventLoop be fds) cb fd evs = do
     stToIO $ do V.reserve fds (fromIntegral $ fd - 1)

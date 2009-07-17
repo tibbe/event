@@ -1,25 +1,25 @@
-name:                event
-version:             0.1
-synopsis:            Scalable event notification
+name:          event
+version:       0.1
+synopsis:      Scalable event notification
 description:
   Scalable event notification for file handles, sockets, timers, etc.
-license:             BSD3
-license-file:        LICENSE
-author:              Bryan O'Sullivan <bos@serpentine.com>
-                     Johan Tibell <johan.tibell@gmail.com>
-maintainer:          Johan Tibell <johan.tibell@gmail.com>
-category:            System
-build-type:          Simple
-cabal-version:       >= 1.6
+license:       BSD3
+license-file:  LICENSE
+author:        Bryan O'Sullivan <bos@serpentine.com>
+               Johan Tibell <johan.tibell@gmail.com>
+maintainer:    Johan Tibell <johan.tibell@gmail.com>
+category:      System
+
+build-type:    Simple
+cabal-version: >= 1.6
 
 library
   exposed-modules:
     System.Event
 
   other-modules:
-    System.Event.Array,
-    System.Event.Internal,
-    System.Event.KQueue,
+    System.Event.Array
+    System.Event.Internal
     System.Event.Vector
 
   build-depends:
@@ -28,9 +28,25 @@ library
     ghc-prim,
     unix
 
-  extensions: CPP, ForeignFunctionInterface, MagicHash, UnboxedTuples
+  if os(darwin)
+    other-modules:
+      System.Event.KQueue
+    cpp-options: -DBACKEND_KQUEUE
+
+  extensions:
+    CPP,
+    ExistentialQuantification,
+    ForeignFunctionInterface,
+    MagicHash,
+    UnboxedTuples
+
   ghc-options: -Wall -funbox-strict-fields
   if impl(ghc >= 6.8)
     ghc-options: -fwarn-tabs
 
-  hs-source-dirs: src
+  hs-source-dirs:
+    src
+
+source-repository head
+  type:     git
+  location: git://github.com/tibbe/event.git
