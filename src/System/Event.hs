@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification, ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ExistentialQuantification, ForeignFunctionInterface #-}
 
 module System.Event
     ( -- * Types
@@ -22,8 +22,13 @@ import Foreign.C.Types (CInt)
 import System.Event.Internal (Backend, Event(..))
 
 import qualified System.Event.Internal as I
-import qualified System.Event.KQueue as KQueue
 import qualified System.Event.Vector as V
+
+#ifdef BACKEND_KQUEUE
+import qualified System.Event.KQueue as KQueue
+#else
+# error not implemented for this operating system
+#endif
 
 ------------------------------------------------------------------------
 -- Types
@@ -42,7 +47,9 @@ data EventLoop = forall a. Backend a => EventLoop
 -- | Create a new event loop.
 new :: IO EventLoop
 new = do
+#ifdef BACKEND_KQUEUE
     be <- KQueue.new  -- TODO: Detect backend to use.
+#endif
     cbs <- stToIO $ V.empty
     return $ EventLoop be cbs
 

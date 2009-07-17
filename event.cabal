@@ -20,7 +20,6 @@ library
   other-modules:
     System.Event.Array
     System.Event.Internal
-    System.Event.KQueue
     System.Event.Vector
 
   build-depends:
@@ -29,7 +28,18 @@ library
     ghc-prim,
     unix
 
-  extensions: CPP, ForeignFunctionInterface, MagicHash, UnboxedTuples
+  if os(darwin)
+    other-modules:
+      System.Event.KQueue
+    cpp-options: -DBACKEND_KQUEUE
+
+  extensions:
+    CPP,
+    ExistentialQuantification,
+    ForeignFunctionInterface,
+    MagicHash,
+    UnboxedTuples
+
   ghc-options: -Wall -funbox-strict-fields
   if impl(ghc >= 6.8)
     ghc-options: -fwarn-tabs
