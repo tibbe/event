@@ -82,10 +82,10 @@ length (Array ref) =
        return sz
 
 snoc :: Storable a => Array a -> a -> IO ()
-snoc arr elem =
+snoc arr element =
     do sz <- length arr
        ensureCapacity arr (sz + 1)
-       unsafeWrite arr sz elem
+       unsafeWrite arr sz element
 
 mapM_ :: Storable a => Array a -> (a -> IO ()) -> IO ()
 mapM_ (Array ref) f =

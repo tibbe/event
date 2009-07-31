@@ -21,9 +21,9 @@ main :: IO ()
 main = do
     -- Increase the maximum number of file descriptors to fit the
     -- number of pipes.
-    let lim = ResourceLimit $ (fromIntegral numPipes) * 2 + 50
+    let lim = ResourceLimit $ fromIntegral numPipes * 2 + 50
     setResourceLimit ResourceOpenFiles
-        (ResourceLimits { softLimit = lim, hardLimit = lim })
+        ResourceLimits { softLimit = lim, hardLimit = lim }
 
     -- Create the pipes.
     ps <- concatMap (\(Fd x, Fd y) -> [fromIntegral x, fromIntegral y]) `fmap`

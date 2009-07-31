@@ -52,7 +52,7 @@ new = do
 #ifdef BACKEND_KQUEUE
     be <- KQueue.new  -- TODO: Detect backend to use.
 #endif
-    cbs <- stToIO $ V.empty
+    cbs <- stToIO V.empty
     return $ EventLoop be cbs
 
 ------------------------------------------------------------------------
