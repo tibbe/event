@@ -32,6 +32,11 @@ library
     other-modules:
       System.Event.KQueue
     cpp-options: -DBACKEND_KQUEUE
+  else
+    if os(linux)
+      other-modules:
+        System.Event.EPoll
+      cpp-options: -DBACKEND_EPOLL
 
   extensions:
     CPP,

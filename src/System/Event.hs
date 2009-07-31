@@ -26,6 +26,8 @@ import qualified System.Event.Vector as V
 
 #ifdef BACKEND_KQUEUE
 import qualified System.Event.KQueue as KQueue
+#elif  BACKEND_EPOLL
+import qualified System.Event.EPoll  as EPoll
 #else
 # error not implemented for this operating system
 #endif
