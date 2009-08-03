@@ -50,7 +50,9 @@ data EventLoop = forall a. Backend a => EventLoop
 new :: IO EventLoop
 new = do
 #ifdef BACKEND_KQUEUE
-    be <- KQueue.new  -- TODO: Detect backend to use.
+    be <- KQueue.new
+#elif  BACKEND_EPOLL
+    be <- EPoll.new
 #endif
     cbs <- stToIO V.empty
     return $ EventLoop be cbs
