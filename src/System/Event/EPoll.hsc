@@ -132,8 +132,7 @@ new = liftM2 EPoll epollCreate (A.new 64)
 
 set :: EPoll -> CInt -> [E.Event] -> IO ()
 set ep fd events =
-    with e $ \ePtr ->
-      epollControl (epollEpfd ep) controlOpAdd fd ePtr
+    with e $ epollControl (epollEpfd ep) controlOpAdd fd
   where
     e   = Event ets fd
     ets = combineEventTypes (map fromEvent events)
