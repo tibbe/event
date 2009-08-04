@@ -76,13 +76,13 @@ combineEventTypes = EventType . foldr ((.|.) . unEventType) 0
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-foreign import ccall unsafe "ep.h epoll_create"
+foreign import ccall unsafe "epoll.h epoll_create"
     c_epoll_create :: CInt -> IO CInt
 
-foreign import ccall unsafe "ep.h epoll_ctl"
+foreign import ccall unsafe "epoll.h epoll_ctl"
     c_epoll_ctl :: CInt -> CInt -> CInt -> Ptr Event -> IO CInt
 
-foreign import ccall unsafe "ep.h epoll_wait"
+foreign import ccall unsafe "epoll.h epoll_wait"
     c_epoll_wait :: CInt -> Ptr Event -> CInt -> CInt -> IO CInt
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
