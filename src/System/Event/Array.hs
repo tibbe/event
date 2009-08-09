@@ -94,4 +94,5 @@ mapM_ (Array ref) f =
                   | otherwise = do
                e <- peek (ptr `plusPtr` n)
                f e
+               loop (n + 1)
        loop 0
