@@ -2,13 +2,15 @@
 
 module System.Event.Array
     ( Array,
-      new,
       empty,
+      new,
+      length,
+      capacity,
       unsafeRead,
       unsafeWrite,
+      unsafeLoad,
       ensureCapacity,
       useAsPtr,
-      length,
       snoc,
       mapM_
     ) where
@@ -37,62 +39,76 @@ newtype Array a = Array (IORef (AC a))
 -- The actual array content.
 data AC a = AC
     !(Ptr a)  -- Elements
-    !Int      -- Size
-    !Int      -- Capacity
-
-new :: Storable a => Int -> IO (Array a)
-new cap = do
-    ptr <- mallocArray cap
-    ref <- newIORef (AC ptr 0 cap)
-    return $ Array ref
+    !Int      -- Number of elements (length)
+    !Int      -- Maximum number of elements (capacity)
 
 empty :: IO (Array a)
 empty = fmap Array (newIORef (AC nullPtr 0 0))
 
-unsafeRead :: Storable a => Array a -> Int -> IO a
-unsafeRead (Array ref) ix = do
-    AC ptr _ cap <- readIORef ref
-    CHECK_BOUNDS("unsafeRead",cap,ix)
-      peekElemOff ptr ix
-
-unsafeWrite :: Storable a => Array a -> Int -> a -> IO ()
-unsafeWrite (Array ref) ix a = do
-    AC ptr _ cap <- readIORef ref
-    CHECK_BOUNDS("unsafeWrite",cap,ix)
-      pokeElemOff ptr ix a
-
-ensureCapacity :: Storable a => Array a -> Int -> IO ()
-ensureCapacity (Array ref) newSize = do
-    AC ptr sz cap <- readIORef ref
-    when (newSize > cap) $ do
-        let cap' = newCap cap
-        ptr' <- reallocArray ptr cap'
-        writeIORef ref (AC ptr' sz cap')
-  where
-    newCap 0      = 64
-    newCap oldCap = 2 * oldCap
-
-useAsPtr :: Array a -> (Ptr a -> Int -> IO b) -> IO b
-useAsPtr (Array ref) f = do
-    AC ptr _ cap <- readIORef ref
-    f ptr cap
+new :: Storable a => Int -> IO (Array a)
+new cap = do
+    es <- mallocArray cap
+    fmap Array (newIORef (AC es 0 cap))
 
 length :: Array a -> IO Int
 length (Array ref) = do
-    AC _ sz _ <- readIORef ref
-    return sz
+    AC _ len _ <- readIORef ref
+    return len
+
+capacity :: Array a -> IO Int
+capacity (Array ref) = do
+    AC _ _ cap <- readIORef ref
+    return cap
+
+unsafeRead :: Storable a => Array a -> Int -> IO a
+unsafeRead (Array ref) ix = do
+    AC es _ cap <- readIORef ref
+    CHECK_BOUNDS("unsafeRead",cap,ix)
+      peekElemOff es ix
+
+unsafeWrite :: Storable a => Array a -> Int -> a -> IO ()
+unsafeWrite (Array ref) ix a = do
+    AC es _ cap <- readIORef ref
+    CHECK_BOUNDS("unsafeWrite",cap,ix)
+      pokeElemOff es ix a
+
+unsafeLoad :: Storable a => Array a -> (Ptr a -> Int -> IO Int) -> IO Int
+unsafeLoad (Array ref) load = do
+    AC es _ cap <- readIORef ref
+    len' <- load es cap
+    writeIORef ref (AC es len' cap)
+    return len'
+
+ensureCapacity :: Storable a => Array a -> Int -> IO ()
+ensureCapacity (Array ref) c = do
+    AC es len cap <- readIORef ref
+    when (c > cap) $ do
+        es' <- reallocArray es cap'
+        writeIORef ref (AC es' len cap')
+  where
+    cap' | c == 0    = 64
+         | otherwise = (ceiling . logBase (2 :: Double) . realToFrac) c
+
+useAsPtr :: Array a -> (Ptr a -> Int -> IO b) -> IO b
+useAsPtr (Array ref) f = do
+    AC es _ cap <- readIORef ref
+    f es cap
 
 snoc :: Storable a => Array a -> a -> IO ()
-snoc arr element = do
-    sz <- length arr
-    ensureCapacity arr (sz + 1)
-    unsafeWrite arr sz element
+snoc arr@(Array ref) e = do
+    len <- length arr
+    let len' = succ len
+    ensureCapacity arr len'
+    unsafeWrite arr len e
+    AC es _ cap <- readIORef ref
+    writeIORef ref (AC es len' cap)
 
 mapM_ :: Storable a => Array a -> (a -> IO ()) -> IO ()
 mapM_ (Array ref) f = do
-    AC ptr sz _ <- readIORef ref
-    let loop n | n == sz = return ()
-               | otherwise = do
-                     peek (ptr `plusPtr` n) >>= f
-                     loop (n + 1)
+    AC es len _ <- readIORef ref
+    let loop n
+            | n == len = return ()
+            | otherwise = do
+                  peek (es `plusPtr` n) >>= f
+                  loop (succ n)
     loop 0

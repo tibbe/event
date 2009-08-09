@@ -142,11 +142,13 @@ poll ep f = do
     let epfd   = epollEpfd   ep
     let events = epollEvents ep
 
-    A.useAsPtr events $ \eventsPtr eventsLen -> do
-        n <- epollWait epfd eventsPtr eventsLen maxNumMilliseconds
-        when (n > 0) $ putStrLn "events!"
-        when (n == eventsLen) $ A.ensureCapacity events (2 * eventsLen)
-        A.mapM_ events $ \e -> f (eventFd e) []
+    n <- A.unsafeLoad events $ \es cap ->
+         epollWait epfd es cap maxNumMilliseconds
+
+    cap <- A.capacity events
+    when (n == cap) $ A.ensureCapacity events (2 * cap)
+
+    A.mapM_ events $ \e -> f (eventFd e) []
   where
     maxNumMilliseconds = 1000
 
