@@ -10,7 +10,7 @@ author:        Bryan O'Sullivan <bos@serpentine.com>
 maintainer:    Johan Tibell <johan.tibell@gmail.com>
 category:      System
 
-build-type:    Simple
+build-type:    Custom
 cabal-version: >= 1.6
 
 library
