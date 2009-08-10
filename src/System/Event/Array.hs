@@ -46,9 +46,11 @@ empty :: IO (Array a)
 empty = fmap Array (newIORef (AC nullPtr 0 0))
 
 new :: Storable a => Int -> IO (Array a)
-new cap = do
+new c = do
     es <- mallocArray cap
     fmap Array (newIORef (AC es 0 cap))
+  where
+    cap = firstPowerOf2 c
 
 length :: Array a -> IO Int
 length (Array ref) = do
@@ -86,8 +88,7 @@ ensureCapacity (Array ref) c = do
         es' <- reallocArray es cap'
         writeIORef ref (AC es' len cap')
   where
-    cap' | c == 0    = 64
-         | otherwise = (ceiling . logBase (2 :: Double) . realToFrac) c
+    cap' = firstPowerOf2 c
 
 useAsPtr :: Array a -> (Ptr a -> Int -> IO b) -> IO b
 useAsPtr (Array ref) f = do
@@ -112,3 +113,9 @@ mapM_ (Array ref) f = do
                   peek (es `plusPtr` n) >>= f
                   loop (succ n)
     loop 0
+
+firstPowerOf2 :: Int -> Int
+firstPowerOf2 n
+    | n <= 0    = 0
+    | otherwise = 2^p
+  where p = (ceiling . logBase (2 :: Double) . realToFrac) n :: Int
