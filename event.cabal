@@ -25,6 +25,7 @@ library
   build-depends:
     array,
     base < 4.1,
+    containers == 0.2.*,
     ghc-prim,
     unix
 

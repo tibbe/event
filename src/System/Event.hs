@@ -16,13 +16,13 @@ module System.Event
       loop
     ) where
 
-import Control.Monad.ST
+import Data.IntMap as IM
+import Data.IORef
 import Foreign.C.Types (CInt)
 
 import System.Event.Internal (Backend, Event(..))
 
 import qualified System.Event.Internal as I
-import qualified System.Event.Vector as V
 
 #ifdef BACKEND_KQUEUE
 import qualified System.Event.KQueue as KQueue
@@ -36,12 +36,12 @@ import qualified System.Event.EPoll  as EPoll
 -- Types
 
 -- | Vector of callbacks indexed by file descriptor.
-type Callbacks = V.Vector RealWorld ([Event] -> IO ())
+type Callbacks = IntMap ([Event] -> IO ())
 
 -- | The event loop state.
 data EventLoop = forall a. Backend a => EventLoop
     !a  -- Backend
-    {-# UNPACK #-} !Callbacks
+    (IORef Callbacks)
 
 ------------------------------------------------------------------------
 -- Creation
@@ -54,7 +54,7 @@ new = do
 #elif  BACKEND_EPOLL
     be <- EPoll.new
 #endif
-    cbs <- stToIO V.empty
+    cbs <- newIORef empty
     return $ EventLoop be cbs
 
 ------------------------------------------------------------------------
@@ -62,8 +62,12 @@ new = do
 
 -- | Start handling events.  This function never returns.
 loop :: EventLoop -> IO ()
-loop (EventLoop be cbs) = loop'
-    where loop' = I.poll be (onFdEvent cbs) >> loop'
+loop el = loop'
+    where loop' = runOnce el >> loop'
+
+runOnce (EventLoop be cbs) = do
+    cbs' <- readIORef cbs
+    I.poll be (onFdEvent cbs')
 
 ------------------------------------------------------------------------
 -- Registering interest in events
@@ -74,9 +78,8 @@ type Callback = [Event] -> IO ()
 -- | @set el cb fd evs@ registers interest in the events @evs@ on the
 -- file descriptor @fd@.  @cb@ is called for each event that occurs.
 set :: EventLoop -> Callback -> CInt -> [Event] -> IO ()
-set (EventLoop be fds) cb fd evs = do
-    stToIO $ do V.reserve fds (fromIntegral $ fd - 1)
-                V.unsafeWrite fds (fromIntegral fd) cb
+set (EventLoop be cbs) cb fd evs = do
+    modifyIORef cbs (IM.insert (fromIntegral fd) cb)
     I.set be fd evs
 
 ------------------------------------------------------------------------
@@ -85,4 +88,6 @@ set (EventLoop be fds) cb fd evs = do
 -- | Call the callback corresponding to the given file descriptor.
 onFdEvent :: Callbacks -> CInt -> [Event] -> IO ()
 onFdEvent cbs fd evs =
-    stToIO (V.unsafeRead cbs (fromIntegral fd)) >>= \f -> f evs
+    case IM.lookup (fromIntegral fd) cbs of
+        Just cb -> cb evs
+        Nothing -> return ()  -- TODO: error?
