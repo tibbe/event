@@ -65,6 +65,7 @@ loop :: EventLoop -> IO ()
 loop el = loop'
     where loop' = runOnce el >> loop'
 
+runOnce :: EventLoop -> IO ()
 runOnce (EventLoop be cbs) = do
     cbs' <- readIORef cbs
     I.poll be (onFdEvent cbs')

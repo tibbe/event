@@ -121,9 +121,9 @@ kqueue = EventQ `fmap` throwErrnoIfMinus1
 
 kevent :: EventQ -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
        -> IO Int
-kevent kq chs chlen evs evlen ts
+kevent k chs chlen evs evlen ts
     = fmap fromIntegral $ throwErrnoIfMinus1 "kevent" $
-      c_kevent kq chs (fromIntegral chlen) evs (fromIntegral evlen) ts
+      c_kevent k chs (fromIntegral chlen) evs (fromIntegral evlen) ts
 
 withTimeSpec :: TimeSpec -> (Ptr TimeSpec -> IO a) -> IO a
 withTimeSpec ts f = alloca $ \ptr -> poke ptr ts >> f ptr
@@ -138,9 +138,9 @@ data EventQueue = EventQueue {
     }
 
 instance E.Backend EventQueue where
-    new = new
-    poll = poll
-    set q fd events = set q fd (combineFilters $ map fromEvent events) flagAdd
+    new          = new
+    poll         = poll
+    set q fd evs = set q fd (combineFilters $ map fromEvent evs) flagAdd
 
 new :: IO EventQueue
 new = do
@@ -159,10 +159,10 @@ poll q f = do
     len <- A.length (events q)
     when (changesLen > len) $ do
         A.ensureCapacity (events q) (2 * changesLen)
-    res <- A.useAsPtr (changes q) $ \changesPtr changesLen ->
-               A.useAsPtr (events q) $ \eventsPtr eventsLen ->
+    res <- A.useAsPtr (changes q) $ \changesPtr chLen ->
+               A.useAsPtr (events q) $ \eventsPtr evLen ->
                withTimeSpec (TimeSpec 1 0) $ \tsPtr ->
-               kevent (kq q) changesPtr changesLen eventsPtr eventsLen tsPtr
+               kevent (kq q) changesPtr chLen eventsPtr evLen tsPtr
 
     when (res > 0) $ putStrLn "events!"
 
