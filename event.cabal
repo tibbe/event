@@ -12,6 +12,7 @@ category:      System
 
 build-type:    Custom
 cabal-version: >= 1.6
+extra-source-files:  README.md
 
 library
   exposed-modules:
