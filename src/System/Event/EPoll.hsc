@@ -132,7 +132,7 @@ instance E.Backend EPoll where
     new    = new
     set    = set
     poll   = poll
-    wakeup = wakeup
+    wakeup = undefined
 
 new :: IO EPoll
 new = liftM2 EPoll epollCreate (A.new 64)
