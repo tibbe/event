@@ -120,6 +120,8 @@ kqueue :: IO EventQ
 kqueue = EventQ `fmap` throwErrnoIfMinus1
          "kqueue" (fmap unEventQ c_kqueue)
 
+-- TODO: Don't die on EINTR.  Either do nothing or use
+-- throwErrnoIfMinus1Retry to retry.
 kevent :: EventQ -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
        -> IO Int
 kevent k chs chlen evs evlen ts
@@ -190,9 +192,12 @@ poll q tout f = do
             A.ensureCapacity (events q) (2 * eventsLen)
 
         A.mapM_ (events q) $ \e -> do
-            let fd = fromIntegral (ident e)
-            -- TODO: Send the list of events to the callback
-            f fd []
+            let fd   = fromIntegral (ident e)
+                filt = filter e
+                evs  = if filt == filterRead then [E.Read]
+                       else if filt == filterWrite then [E.Write]
+                            else []
+            f fd evs
 
         return E.Activity
 
