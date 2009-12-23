@@ -14,7 +14,7 @@ module System.Event
       IOCallback,
       registerFd,
 
-      -- * Registering timeout callbacks
+      -- * Registering interest in timeout events
       TimeoutCallback,
       registerTimeout,
       updateTimeout,
@@ -24,23 +24,19 @@ module System.Event
       loop
     ) where
 
-
 ------------------------------------------------------------------------
 -- Imports
 
-import           Control.Monad (sequence_)
-import           Data.IntMap as IM
-import           Data.IORef
-import           Data.Maybe (maybe)
-import           Data.Time.Clock ( NominalDiffTime
-                                 , UTCTime
-                                 , addUTCTime
-                                 , diffUTCTime
-                                 , getCurrentTime)
-import           Data.Unique
-import           System.Posix.Types (Fd(..))
-                
-import           System.Event.Internal (Backend, Event(..), Timeout(..))
+import Control.Monad (sequence_)
+import Data.IntMap as IM
+import Data.IORef
+import Data.Maybe (maybe)
+import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime,
+                        getCurrentTime)
+import Data.Unique
+import System.Posix.Types (Fd)
+
+import System.Event.Internal (Backend, Event(..), Timeout(..))
 import qualified System.Event.Internal as I
 import qualified System.Event.TimeoutTable as TT
 
@@ -52,11 +48,10 @@ import qualified System.Event.EPoll  as EPoll
 # error not implemented for this operating system
 #endif
 
-
 ------------------------------------------------------------------------
 -- Types
 
--- | Vector of callbacks indexed by file descriptor.
+-- | Vector of I/O callbacks, indexed by file descriptor.
 type IOCallbacks = IntMap ([Event] -> IO ())
 
 -- FIXME: choose a quicker time representation than UTCTime? We'll be calling
@@ -68,9 +63,9 @@ type TimeoutTable    = TT.TimeoutTable TimeRep TimeoutKey TimeoutCallback
 
 -- | The event manager state.
 data EventManager = forall a. Backend a => EventManager
-    { _elBackend      :: !a                    -- ^ Backend
-    , _elIOCallbacks  :: !(IORef IOCallbacks)    -- ^ I/O callbacks
-    , _elTimeoutTable :: !(IORef TimeoutTable) -- ^ Timeout table
+    { _elBackend      :: !a                     -- ^ Backend
+    , _elIOCallbacks  :: !(IORef IOCallbacks)   -- ^ I/O callbacks
+    , _elTimeoutTable :: !(IORef TimeoutTable)  -- ^ Timeout table
     }
 
 ------------------------------------------------------------------------
@@ -98,7 +93,6 @@ loop mgr@(EventManager be _ tt) = do
     go now
 
   where
-    --------------------------------------------------------------------------
     go now = do
         timeout <- mkTimeout now
         reason  <- I.poll be timeout ioCallback
@@ -111,36 +105,32 @@ loop mgr@(EventManager be _ tt) = do
 
         go now'
 
-    --------------------------------------------------------------------------
     inMs :: NominalDiffTime -> Maybe Timeout
     inMs d =
         if v <= 0 then Nothing else Just $ Timeout v
       where
         v = floor (1000 * d)
 
-    --------------------------------------------------------------------------
     timeoutCallback = onTimeoutEvent mgr
     ioCallback      = onFdEvent mgr
 
-    --------------------------------------------------------------------------
     mkTimeout now = do
         tt' <- readIORef tt
 
         let mbOldest = TT.findOldest tt'
 
-        -- if there are expired items in the timeout table then we need to run
-        -- the callback now; normally this would be handled within I.poll but
-        -- it could happen if e.g. one of the timeout callbacks took a long
-        -- time
+        -- If there are expired items in the timeout table then we
+        -- need to run the callback now; normally this would be
+        -- handled within I.poll but it could happen if e.g. one of
+        -- the timeout callbacks took a long time
         maybe (return Forever)
               (\(tm,_,_) -> maybe (timeoutCallback now >> mkTimeout now)
                                   return
                                   (inMs $ diffUTCTime tm now))
               mbOldest
 
-
 ------------------------------------------------------------------------
--- Registering interest in events
+-- Registering interest in I/O events
 
 -- | Callback invoked on I/O events.
 type IOCallback = [Event] -> IO ()
@@ -156,9 +146,8 @@ registerFd (EventManager be cbs _) cb fd evs = do
 
     -- I.wakeup be
 
-
 ------------------------------------------------------------------------
--- Registering timeout callbacks
+-- Registering interest in timeout events
 
 registerTimeout :: EventManager -> Int -> TimeoutCallback -> IO TimeoutKey
 registerTimeout (EventManager _ _ tt) ms cb = do
@@ -170,13 +159,11 @@ registerTimeout (EventManager _ _ tt) ms cb = do
     -- I.wakeup be
     return key
 
-
 clearTimeout :: EventManager -> TimeoutKey -> IO ()
 clearTimeout (EventManager _ _ tt) key = do
     atomicModifyIORef tt $ \tab -> (TT.delete key tab, ())
     -- I.wakeup be
     return ()
-
 
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
 updateTimeout (EventManager _ _ tt) key ms = do
@@ -186,7 +173,6 @@ updateTimeout (EventManager _ _ tt) key ms = do
     atomicModifyIORef tt $ \tab -> (TT.update key expTime tab, ())
     -- I.wakeup be
     return ()
-
 
 ------------------------------------------------------------------------
 -- Utilities
@@ -198,7 +184,6 @@ onFdEvent (EventManager _ cbs' _) fd evs = do
     case IM.lookup (fromIntegral fd) cbs of
         Just cb -> cb evs
         Nothing -> return ()  -- TODO: error?
-
 
 onTimeoutEvent :: EventManager -> TimeRep -> IO ()
 onTimeoutEvent (EventManager _ _ tt) now = do
@@ -216,6 +201,5 @@ onTimeoutEvent (EventManager _ _ tt) now = do
                             then let !table' = TT.delete k table
                                  in go (c:l) table'
                             else (table, l)
-                                
-    expired t = diffUTCTime now t >= 0
 
+    expired t = diffUTCTime now t >= 0
