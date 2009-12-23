@@ -120,10 +120,12 @@ kqueue :: IO EventQ
 kqueue = EventQ `fmap` throwErrnoIfMinus1
          "kqueue" (fmap unEventQ c_kqueue)
 
+-- TODO: We cannot retry on EINTR as the timeout would be wrong.
+-- Perhaps we should just return without calling any callbacks.
 kevent :: EventQ -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
        -> IO Int
 kevent k chs chlen evs evlen ts
-    = fmap fromIntegral $ throwErrnoIfMinus1Retry "kevent" $
+    = fmap fromIntegral $ throwErrnoIfMinus1 "kevent" $
       c_kevent k chs (fromIntegral chlen) evs (fromIntegral evlen) ts
 
 withTimeSpec :: TimeSpec -> (Ptr TimeSpec -> IO a) -> IO a
