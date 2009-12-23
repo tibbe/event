@@ -1,22 +1,22 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 
 module System.Event
     ( -- * Types
-      EventLoop,
+      EventManager,
 
       -- * Creation
       new,
 
       -- * Registering interest in I/O events
       Event(..),
-      Callback,
-      setFD,
+      IOCallback,
+      registerFd,
 
       -- * Registering timeout callbacks
-      setTimeout,
+      TimeoutCallback,
+      registerTimeout,
       updateTimeout,
       clearTimeout,
 
@@ -57,7 +57,7 @@ import qualified System.Event.EPoll  as EPoll
 -- Types
 
 -- | Vector of callbacks indexed by file descriptor.
-type Callbacks = IntMap ([Event] -> IO ())
+type IOCallbacks = IntMap ([Event] -> IO ())
 
 -- FIXME: choose a quicker time representation than UTCTime? We'll be calling
 -- "getCurrentTime" a lot.
@@ -66,18 +66,18 @@ type TimeoutKey      = Unique
 type TimeoutCallback = IO ()
 type TimeoutTable    = TT.TimeoutTable TimeRep TimeoutKey TimeoutCallback
 
--- | The event loop state.
-data EventLoop = forall a. Backend a => EventLoop
+-- | The event manager state.
+data EventManager = forall a. Backend a => EventManager
     { _elBackend      :: !a                    -- ^ Backend
-    , _elIOCallbacks  :: !(IORef Callbacks)    -- ^ I/O callbacks
+    , _elIOCallbacks  :: !(IORef IOCallbacks)    -- ^ I/O callbacks
     , _elTimeoutTable :: !(IORef TimeoutTable) -- ^ Timeout table
     }
 
 ------------------------------------------------------------------------
 -- Creation
 
--- | Create a new event loop.
-new :: IO EventLoop
+-- | Create a new event manager.
+new :: IO EventManager
 new = do
 #ifdef BACKEND_KQUEUE
     be <- KQueue.new
@@ -86,14 +86,14 @@ new = do
 #endif
     cbs <- newIORef empty
     tms <- newIORef TT.empty
-    return $ EventLoop be cbs tms
+    return $ EventManager be cbs tms
 
 ------------------------------------------------------------------------
 -- Event loop
 
 -- | Start handling events.  This function never returns.
-loop :: EventLoop -> IO ()
-loop el@(EventLoop be _ tt) = do
+loop :: EventManager -> IO ()
+loop mgr@(EventManager be _ tt) = do
     now <- getCurrentTime
     go now
 
@@ -119,8 +119,8 @@ loop el@(EventLoop be _ tt) = do
         v = floor (1000 * d)
 
     --------------------------------------------------------------------------
-    timeoutCallback = onTimeoutEvent el
-    ioCallback      = onFdEvent el
+    timeoutCallback = onTimeoutEvent mgr
+    ioCallback      = onFdEvent mgr
 
     --------------------------------------------------------------------------
     mkTimeout now = do
@@ -143,12 +143,13 @@ loop el@(EventLoop be _ tt) = do
 -- Registering interest in events
 
 -- | Callback invoked on I/O events.
-type Callback = [Event] -> IO ()
+type IOCallback = [Event] -> IO ()
 
--- | @set el cb fd evs@ registers interest in the events @evs@ on the
--- file descriptor @fd@.  @cb@ is called for each event that occurs.
-setFD :: EventLoop -> Callback -> Fd -> [Event] -> IO ()
-setFD (EventLoop be cbs _) cb fd evs = do
+-- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
+-- on the file descriptor @fd@.  @cb@ is called for each event that
+-- occurs.
+registerFd :: EventManager -> IOCallback -> Fd -> [Event] -> IO ()
+registerFd (EventManager be cbs _) cb fd evs = do
     atomicModifyIORef cbs $ \c -> (IM.insert (fromIntegral fd) cb c, ())
     I.set be (fromIntegral fd) evs
     -- TODO: uncomment once wakeup is implemented in the backends
@@ -159,8 +160,8 @@ setFD (EventLoop be cbs _) cb fd evs = do
 ------------------------------------------------------------------------
 -- Registering timeout callbacks
 
-setTimeout :: EventLoop -> Int -> TimeoutCallback -> IO TimeoutKey
-setTimeout (EventLoop _ _ tt) ms cb = do
+registerTimeout :: EventManager -> Int -> TimeoutCallback -> IO TimeoutKey
+registerTimeout (EventManager _ _ tt) ms cb = do
     now <- getCurrentTime
     let expTime = addUTCTime (1000 * fromIntegral ms) now
     key <- newUnique
@@ -170,15 +171,15 @@ setTimeout (EventLoop _ _ tt) ms cb = do
     return key
 
 
-clearTimeout :: EventLoop -> TimeoutKey -> IO ()
-clearTimeout (EventLoop _ _ tt) key = do
+clearTimeout :: EventManager -> TimeoutKey -> IO ()
+clearTimeout (EventManager _ _ tt) key = do
     atomicModifyIORef tt $ \tab -> (TT.delete key tab, ())
     -- I.wakeup be
     return ()
 
 
-updateTimeout :: EventLoop -> TimeoutKey -> Int -> IO ()
-updateTimeout (EventLoop _ _ tt) key ms = do
+updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
+updateTimeout (EventManager _ _ tt) key ms = do
     now <- getCurrentTime
     let expTime = addUTCTime (1000 * fromIntegral ms) now
 
@@ -191,16 +192,16 @@ updateTimeout (EventLoop _ _ tt) key ms = do
 -- Utilities
 
 -- | Call the callback corresponding to the given file descriptor.
-onFdEvent :: EventLoop -> Fd -> [Event] -> IO ()
-onFdEvent (EventLoop _ cbs' _) fd evs = do
+onFdEvent :: EventManager -> Fd -> [Event] -> IO ()
+onFdEvent (EventManager _ cbs' _) fd evs = do
     cbs <- readIORef cbs'
     case IM.lookup (fromIntegral fd) cbs of
         Just cb -> cb evs
         Nothing -> return ()  -- TODO: error?
 
 
-onTimeoutEvent :: EventLoop -> TimeRep -> IO ()
-onTimeoutEvent (EventLoop _ _ tt) now = do
+onTimeoutEvent :: EventManager -> TimeRep -> IO ()
+onTimeoutEvent (EventManager _ _ tt) now = do
     touts <- atomicModifyIORef tt grabExpired
     sequence_ touts
 
