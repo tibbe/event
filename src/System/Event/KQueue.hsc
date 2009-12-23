@@ -120,12 +120,10 @@ kqueue :: IO EventQ
 kqueue = EventQ `fmap` throwErrnoIfMinus1
          "kqueue" (fmap unEventQ c_kqueue)
 
--- TODO: Don't die on EINTR.  Either do nothing or use
--- throwErrnoIfMinus1Retry to retry.
 kevent :: EventQ -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
        -> IO Int
 kevent k chs chlen evs evlen ts
-    = fmap fromIntegral $ throwErrnoIfMinus1 "kevent" $
+    = fmap fromIntegral $ throwErrnoIfMinus1Retry "kevent" $
       c_kevent k chs (fromIntegral chlen) evs (fromIntegral evlen) ts
 
 withTimeSpec :: TimeSpec -> (Ptr TimeSpec -> IO a) -> IO a
