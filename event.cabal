@@ -22,6 +22,8 @@ library
     System.Event.Array
     System.Event.Internal
     System.Event.Vector
+    System.Event.TimeoutTable
+    System.Event.TimeoutTable.Internal
 
   build-depends:
     array,
