@@ -1,17 +1,20 @@
-import Control.Monad (when)
-import System.Exit (exitFailure)
+module System.Event.Array.Tests (tests) where
 
 import System.Event.Array (Array)
 import qualified System.Event.Array as A
 
-import Test.HUnit (Counts(..), Test(..), (@=?), runTestTT)
+import Test.Framework (testGroup)
+import qualified Test.Framework
+import Test.Framework.Providers.HUnit (hUnitTestToTests)
+import Test.HUnit (Test(..), (@=?))
 
-main :: IO ()
-main = do
-    counts <- runTestTT tests
-    when (errors counts + failures counts > 0) exitFailure
-  where
-    tests = TestList
+
+tests :: Test.Framework.Test
+tests = testGroup "System.Event.Array" $ hUnitTestToTests testlist
+
+
+testlist :: Test
+testlist = TestList
       [ TestLabel "empty"   testEmpty
       , TestLabel "new 0"   (testNew   0   0)
       , TestLabel "new 1"   (testNew   1   1)
@@ -25,6 +28,7 @@ main = do
       , TestLabel "1 snoc on cap 0"  (testSnoc 0 1 1)
       , TestLabel "5 snocs on cap 4" (testSnoc 4 5 8)
       ]
+
 
 testEmpty :: Test
 testEmpty = TestCase $ do
