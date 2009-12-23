@@ -27,12 +27,12 @@ newtype EventQ = EventQ { unEventQ :: CInt }
     deriving (Eq, Show)
 
 data Event = Event {
-      ident  :: CUIntPtr
-    , filter :: Filter
-    , flags  :: Flag
-    , fflags :: CUInt
-    , data_  :: CIntPtr
-    , udata  :: Ptr ()
+      ident  :: !CUIntPtr
+    , filter :: !Filter
+    , flags  :: !Flag
+    , fflags :: !CUInt
+    , data_  :: !CIntPtr
+    , udata  :: !(Ptr ())
     } deriving Show
 
 instance Storable Event where
@@ -92,8 +92,8 @@ combineFilters :: [Filter] -> Filter
 combineFilters = Filter . foldr ((.|.) . unFilter) 0
 
 data TimeSpec = TimeSpec {
-      tv_sec  :: CTime
-    , tv_nsec :: CLong
+      tv_sec  :: !CTime
+    , tv_nsec :: !CLong
     }
 
 instance Storable TimeSpec where
