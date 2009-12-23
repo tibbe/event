@@ -57,5 +57,16 @@ review your changes and may ask you to make changes to them.  Make the
 changes to your local repository and use `git rebase` to massage them
 into nice, logical commits and resend the patches.
 
+Running the tests
+-----------------
+
+You can run all unit tests by first building the "test" executable and
+then running `cabal test`:
+
+    cabal clean && cabal configure -ftest && cabal build && cabal test
+
+References
+----------
+
 [1]: http://github.com/tibbe/haskell-style-guide
 [2]: http://www.tpope.net/node/106
