@@ -149,23 +149,23 @@ msToTimeSpec (Timeout ms) = TimeSpec (toEnum sec) (toEnum nanosec)
 -- Exported interface
 
 data EventQueue = EventQueue {
-      kq      :: !EventQ
-    , changes :: !(A.Array Event)
-    , events  :: !(A.Array Event)
+      kq       :: !EventQ
+    , changes  :: !(A.Array Event)
+    , events   :: !(A.Array Event)
+    , eqWakeup :: !E.Wakeup
     }
 
 instance E.Backend EventQueue where
     new          = new
     poll         = poll
     set q fd evs = set q fd (combineFilters $ map fromEvent evs) flagAdd
-    wakeup       = undefined
+    wakeup       = wakeup
 
 new :: IO EventQueue
 new = do
-    kq' <- kqueue
-    changes' <- A.empty
-    events' <- A.new 64
-    return $ EventQueue kq' changes' events'
+    eq <- liftM4 EventQueue kqueue A.empty (A.new 64) E.createWakeup
+    set eq (E.wakeupReadFd . eqWakeup $ eq) [E.Read]
+    return eq
 
 set :: EventQueue -> Fd -> Filter -> Flag -> IO ()
 set q fd fltr flg =
@@ -200,6 +200,9 @@ poll q tout f = do
             f fd evs
 
         return E.Activity
+
+wakeup :: EventQueue -> E.WakeupMessage -> IO ()
+wakeup ep = E.writeWakeupMessage (eqWakeup ep)
 
 fromEvent :: E.Event -> Filter
 fromEvent E.Read  = filterRead

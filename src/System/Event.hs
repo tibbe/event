@@ -36,7 +36,7 @@ import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime,
 import Data.Unique
 import System.Posix.Types (Fd)
 
-import System.Event.Internal (Backend, Event(..), Timeout(..))
+import System.Event.Internal (Backend, Event(..), Timeout(..), wmWakeup)
 import qualified System.Event.Internal as I
 import qualified System.Event.TimeoutTable as TT
 
@@ -138,37 +138,33 @@ registerFd :: EventManager -> IOCallback -> Fd -> [Event] -> IO ()
 registerFd (EventManager be cbs _) cb fd evs = do
     atomicModifyIORef cbs $ \c -> (IM.insert (fromIntegral fd) cb c, ())
     I.set be (fromIntegral fd) evs
-    -- TODO: uncomment once wakeup is implemented in the backends
-
-    -- I.wakeup be
+    I.wakeup be wmWakeup
 
 ------------------------------------------------------------------------
 -- Registering interest in timeout events
 
 registerTimeout :: EventManager -> Int -> TimeoutCallback -> IO TimeoutKey
-registerTimeout (EventManager _ _ tt) ms cb = do
+registerTimeout (EventManager be _ tt) ms cb = do
     now <- getCurrentTime
     let expTime = addUTCTime (1000 * fromIntegral ms) now
     key <- newUnique
 
     atomicModifyIORef tt $ \tab -> (TT.insert expTime key cb tab, ())
-    -- I.wakeup be
+    I.wakeup be wmWakeup
     return key
 
 clearTimeout :: EventManager -> TimeoutKey -> IO ()
-clearTimeout (EventManager _ _ tt) key = do
+clearTimeout (EventManager be _ tt) key = do
     atomicModifyIORef tt $ \tab -> (TT.delete key tab, ())
-    -- I.wakeup be
-    return ()
+    I.wakeup be wmWakeup
 
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
-updateTimeout (EventManager _ _ tt) key ms = do
+updateTimeout (EventManager be _ tt) key ms = do
     now <- getCurrentTime
     let expTime = addUTCTime (1000 * fromIntegral ms) now
 
     atomicModifyIORef tt $ \tab -> (TT.update key expTime tab, ())
-    -- I.wakeup be
-    return ()
+    I.wakeup be wmWakeup
 
 ------------------------------------------------------------------------
 -- Utilities

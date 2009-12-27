@@ -4,7 +4,7 @@ module System.Event.EPoll where
 
 #include <sys/epoll.h>
 
-import Control.Monad (liftM, liftM2, when)
+import Control.Monad (liftM, liftM3, when)
 import Data.Bits ((.|.))
 import Foreign.C.Error (throwErrnoIfMinus1)
 import Foreign.C.Types (CInt, CUInt)
@@ -126,16 +126,20 @@ epollWait epfd events maxNumEvents maxNumMilliseconds =
 data EPoll = EPoll
     { epollEpfd   :: !EPollFd
     , epollEvents :: !(A.Array Event)
+    , epollWakeup :: !E.Wakeup
     }
 
 instance E.Backend EPoll where
     new    = new
     set    = set
     poll   = poll
-    wakeup = undefined
+    wakeup = wakeup
 
 new :: IO EPoll
-new = liftM2 EPoll epollCreate (A.new 64)
+new = do
+  ep <- liftM3 EPoll epollCreate (A.new 64) E.createWakeup
+  set ep (E.wakeupReadFd . epollWakeup $ ep) [E.Read]
+  return ep
 
 set :: EPoll -> Fd -> [E.Event] -> IO ()
 set ep fd events =
@@ -164,6 +168,9 @@ poll ep timeout f = do
         A.mapM_ events $ \e -> f (eventFd e) []
 
         return E.Activity
+
+wakeup :: EPoll -> E.WakeupMessage -> IO ()
+wakeup ep = E.writeWakeupMessage (epollWakeup ep)
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
