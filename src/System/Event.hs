@@ -40,10 +40,10 @@ import System.Event.Internal (Backend, Event(..), Timeout(..))
 import qualified System.Event.Internal as I
 import qualified System.Event.TimeoutTable as TT
 
-#ifdef BACKEND_KQUEUE
-import qualified System.Event.KQueue as KQueue
-#elif  BACKEND_EPOLL
-import qualified System.Event.EPoll  as EPoll
+#if defined(BACKEND_KQUEUE)
+import qualified System.Event.KQueue as Backend
+#elif defined(BACKEND_EPOLL)
+import qualified System.Event.EPoll  as Backend
 #else
 # error not implemented for this operating system
 #endif
@@ -74,11 +74,7 @@ data EventManager = forall a. Backend a => EventManager
 -- | Create a new event manager.
 new :: IO EventManager
 new = do
-#ifdef BACKEND_KQUEUE
-    be <- KQueue.new
-#elif  BACKEND_EPOLL
-    be <- EPoll.new
-#endif
+    be <- Backend.new
     cbs <- newIORef empty
     tms <- newIORef TT.empty
     return $ EventManager be cbs tms
