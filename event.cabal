@@ -34,7 +34,6 @@ library
     base < 4.1,
     containers == 0.2.*,
     ghc-prim,
-    old-locale,
     time < 1.2,
     unix
 
