@@ -8,6 +8,7 @@
 module Main where
 
 import Args (ljust, parseArgs, positive, theLast)
+import Control.Concurrent (MVar, forkIO, takeMVar, newEmptyMVar, putMVar)
 import Control.Monad (forM_, replicateM, when)
 import Data.Array.Unboxed (UArray, listArray)
 import Data.Function (on)
@@ -52,11 +53,13 @@ defaultOptions = [
           "number of pipes to use"
  ]
 
-readCallback :: IORef Int -> Fd -> [Event] -> IO ()
-readCallback ref fd _ = do
+readCallback :: MVar () -> IORef Int -> Fd -> [Event] -> IO ()
+readCallback done ref fd _ = do
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
   if a > 10
-    then close fd
+    then do
+      close fd
+      putMVar done ()
     else do
       print ("read",fd)
       readByte fd
@@ -83,15 +86,17 @@ main = do
     let pipes = concatMap (\(r,w) -> [r,w]) pipePairs
 
     mgr <- new
+    forkIO $ loop mgr
     rref <- newIORef 0
     wref <- newIORef 0
+    done <- newEmptyMVar
     forM_ pipePairs $ \(r,w) -> do
-      registerFd mgr (readCallback rref r) r [Read]
+      registerFd mgr (readCallback done rref r) r [Read]
       registerFd mgr (writeCallback wref w) w [Write]
 
     let pipeArray :: UArray Int Int32
         pipeArray = listArray (0, numPipes) . map fromIntegral $ pipes
-    loop mgr
+    takeMVar done
 
 readByte :: Fd -> IO ()
 readByte (Fd fd) =
