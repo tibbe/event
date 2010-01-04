@@ -7,26 +7,105 @@
 
 module Main where
 
-import Control.Monad
-import Data.Array.IArray
-import Data.Array.Unboxed
-import System.Posix.IO
-import System.Posix.Resource
-import System.Posix.Types
+import Args (ljust, parseArgs, positive, theLast)
+import Control.Monad (forM_, replicateM, when)
+import Data.Array.Unboxed (UArray, listArray)
+import Data.Function (on)
+import Data.IORef (IORef, atomicModifyIORef, newIORef)
+import Data.Int (Int32)
+import Data.Monoid (Monoid(..), Last(..), getLast)
+import Foreign.C.Error (throwErrnoIfMinus1Retry)
+import Foreign.Marshal.Alloc (alloca)
+import Foreign.Ptr (Ptr)
+import Foreign.C.Types (CChar)
+import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
+import System.Environment (getArgs)
+import System.Event (Event(..), loop, new, registerFd)
+import System.Posix.IO (createPipe)
+import System.Posix.Resource (ResourceLimit(..), ResourceLimits(..),
+                              Resource(..), setResourceLimit)
+import System.Posix.Internals (c_close, c_read, c_write)
+import System.Posix.Types (Fd(..))
 
-numPipes :: Int
-numPipes = 1024
+data Config = Config {
+      cfgNumPipes :: Last Int
+    }
+
+defaultConfig :: Config
+defaultConfig = Config {
+                  cfgNumPipes = ljust 1024
+                }
+
+instance Monoid Config where
+    mempty  = Config {
+                cfgNumPipes = mempty
+              }
+    mappend a b = Config {
+                    cfgNumPipes = app cfgNumPipes a b
+                  }
+        where app = on mappend
+
+defaultOptions :: [OptDescr (IO Config)]
+defaultOptions = [
+  Option ['n'] ["num-pipes"]
+         (ReqArg (positive "number of pipes" $ \n -> mempty { cfgNumPipes = n }) "N")
+          "number of pipes to use"
+ ]
+
+readCallback :: IORef Int -> Fd -> [Event] -> IO ()
+readCallback ref fd _ = do
+  a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
+  if a > 10
+    then close fd
+    else do
+      print ("read",fd)
+      readByte fd
+
+writeCallback :: IORef Int -> Fd -> [Event] -> IO ()
+writeCallback ref fd _ = do
+  a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
+  if a > 10
+    then close fd
+    else do
+      print ("write",fd)
+      writeByte fd
 
 main :: IO ()
 main = do
-    -- Increase the maximum number of file descriptors to fit the
-    -- number of pipes.
-    let lim = ResourceLimit $ fromIntegral numPipes * 2 + 50
+    (cfg, args) <- parseArgs defaultConfig defaultOptions =<< getArgs
+    let numPipes = theLast cfgNumPipes cfg
+        lim = ResourceLimit $ fromIntegral numPipes * 2 + 50
     setResourceLimit ResourceOpenFiles
         ResourceLimits { softLimit = lim, hardLimit = lim }
 
-    -- Create the pipes.
-    ps <- concatMap (\(Fd x, Fd y) -> [fromIntegral x, fromIntegral y]) `fmap`
-          replicateM numPipes createPipe
-    let pipes = listArray (0, numPipes) ps :: UArray Int Int
-    return ()
+    pipePairs <- replicateM numPipes createPipe
+    print pipePairs
+    let pipes = concatMap (\(r,w) -> [r,w]) pipePairs
+
+    mgr <- new
+    rref <- newIORef 0
+    wref <- newIORef 0
+    forM_ pipePairs $ \(r,w) -> do
+      registerFd mgr (readCallback rref r) r [Read]
+      registerFd mgr (writeCallback wref w) w [Write]
+
+    let pipeArray :: UArray Int Int32
+        pipeArray = listArray (0, numPipes) . map fromIntegral $ pipes
+    loop mgr
+
+readByte :: Fd -> IO ()
+readByte (Fd fd) =
+    alloca $ \p -> do
+      n <- throwErrnoIfMinus1Retry "readByte" $ c_read fd p 1
+      when (n /= 1) . error $ "readByte returned " ++ show n
+
+writeByte :: Fd -> IO ()
+writeByte (Fd fd) =
+    alloca $ \p -> do
+      n <- throwErrnoIfMinus1Retry "writeByte" $ c_write fd p 1
+      when (n /= 1) . error $ "writeByte returned " ++ show n
+      
+close :: Fd -> IO ()
+close (Fd fd) = do
+  c_close fd
+  return ()
