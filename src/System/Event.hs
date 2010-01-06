@@ -10,7 +10,9 @@ module System.Event
       new,
 
       -- * Registering interest in I/O events
-      Event(..),
+      Event,
+      evtRead,
+      evtWrite,
       IOCallback,
       registerFd,
 
@@ -36,7 +38,7 @@ import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime,
 import Data.Unique
 import System.Posix.Types (Fd)
 
-import System.Event.Internal (Backend, Event(..), Timeout(..), wmWakeup)
+import System.Event.Internal (Backend, Event, evtRead, evtWrite, Timeout(..), wmWakeup)
 import qualified System.Event.Internal as I
 import qualified System.Event.TimeoutTable as TT
 
@@ -52,7 +54,7 @@ import qualified System.Event.EPoll  as Backend
 -- Types
 
 -- | Vector of I/O callbacks, indexed by file descriptor.
-type IOCallbacks = IntMap ([Event] -> IO ())
+type IOCallbacks = IntMap (Event -> IO ())
 
 -- FIXME: choose a quicker time representation than UTCTime? We'll be calling
 -- "getCurrentTime" a lot.
@@ -122,12 +124,12 @@ loop mgr@(EventManager be _ tt) = go =<< getCurrentTime
 -- Registering interest in I/O events
 
 -- | Callback invoked on I/O events.
-type IOCallback = [Event] -> IO ()
+type IOCallback = Event -> IO ()
 
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
 -- on the file descriptor @fd@.  @cb@ is called for each event that
 -- occurs.
-registerFd :: EventManager -> IOCallback -> Fd -> [Event] -> IO ()
+registerFd :: EventManager -> IOCallback -> Fd -> Event -> IO ()
 registerFd (EventManager be cbs _) cb fd evs = do
     atomicModifyIORef cbs $ \c -> (IM.insert (fromIntegral fd) cb c, ())
     I.set be (fromIntegral fd) evs
@@ -163,7 +165,7 @@ updateTimeout (EventManager be _ tt) key ms = do
 -- Utilities
 
 -- | Call the callback corresponding to the given file descriptor.
-onFdEvent :: EventManager -> Fd -> [Event] -> IO ()
+onFdEvent :: EventManager -> Fd -> Event -> IO ()
 onFdEvent (EventManager _ cbs' _) fd evs = do
     cbs <- readIORef cbs'
     case IM.lookup (fromIntegral fd) cbs of

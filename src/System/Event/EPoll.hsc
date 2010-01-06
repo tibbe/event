@@ -5,7 +5,8 @@ module System.Event.EPoll where
 #include <sys/epoll.h>
 
 import Control.Monad (liftM3, when)
-import Data.Bits ((.|.))
+import Data.Bits ((.|.), (.&.))
+import Data.Monoid (Monoid(..))
 import Data.Word (Word32)
 import Foreign.C.Error (throwErrnoIfMinus1, throwErrnoIfMinus1_)
 import Foreign.C.Types (CInt)
@@ -33,19 +34,16 @@ instance E.Backend EPoll where
 new :: IO EPoll
 new = do
   ep <- liftM3 EPoll epollCreate (A.new 64) E.createWakeup
-  set ep (E.wakeupReadFd . epollWakeup $ ep) [E.Read]
+  set ep (E.wakeupReadFd . epollWakeup $ ep) E.evtRead
   return ep
 
-set :: EPoll -> Fd -> [E.Event] -> IO ()
-set ep fd events =
-    with e $ epollControl (epollFd ep) controlOpAdd fd
-  where
-    e   = Event ets fd
-    ets = combineEventTypes (map fromEvent events)
+set :: EPoll -> Fd -> E.Event -> IO ()
+set ep fd events = with e $ epollControl (epollFd ep) controlOpAdd fd
+  where e = Event (fromEvent events) fd
 
 poll :: EPoll                        -- ^ state
      -> Timeout                      -- ^ timeout in milliseconds
-     -> (Fd -> [E.Event] -> IO ()) -- ^ I/O callback
+     -> (Fd -> E.Event -> IO ()) -- ^ I/O callback
      -> IO E.Result
 poll ep timeout f = do
     let epfd   = epollFd   ep
@@ -60,7 +58,7 @@ poll ep timeout f = do
         cap <- A.capacity events
         when (n == cap) $ A.ensureCapacity events (2 * cap)
 
-        A.mapM_ events $ \e -> f (eventFd e) []
+        A.mapM_ events $ \e -> f (eventFd e) (toEvent (eventTypes e))
 
         return E.Activity
 
@@ -99,9 +97,6 @@ newtype EventType = EventType {
       unEventType :: Word32
     } deriving (Show)
 
-combineEventTypes :: [EventType] -> EventType
-combineEventTypes = EventType . foldr ((.|.) . unEventType) 0
-
 epollCreate :: IO EPollFd
 epollCreate =
     fmap EPollFd .
@@ -119,8 +114,18 @@ epollWait (EPollFd epfd) events numEvents timeout =
     c_epoll_wait epfd events (fromIntegral numEvents) (fromIntegral timeout)
 
 fromEvent :: E.Event -> EventType
-fromEvent E.Read  = EventType #const EPOLLIN
-fromEvent E.Write = EventType #const EPOLLOUT
+fromEvent e = EventType (remap E.evtRead (#const EPOLLIN) .|.
+                         remap E.evtWrite (#const EPOLLOUT))
+  where remap evt to
+            | e `E.eventIs` evt = to
+            | otherwise         = 0
+
+toEvent :: EventType -> E.Event
+toEvent (EventType e) = remap (#const EPOLLIN) E.evtRead `mappend`
+                        remap (#const EPOLLOUT) E.evtWrite
+  where remap evt to
+            | e .&. evt /= 0 = to
+            | otherwise      = mempty
 
 fromTimeout :: Timeout -> Int
 fromTimeout Forever      = -1

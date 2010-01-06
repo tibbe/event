@@ -21,7 +21,7 @@ import Foreign.Ptr (Ptr)
 import Foreign.C.Types (CChar)
 import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
-import System.Event (Event(..), loop, new, registerFd)
+import System.Event (Event(..), evtRead, evtWrite, loop, new, registerFd)
 import System.Posix.IO (createPipe)
 import System.Posix.Resource (ResourceLimit(..), ResourceLimits(..),
                               Resource(..), setResourceLimit)
@@ -53,7 +53,7 @@ defaultOptions = [
           "number of pipes to use"
  ]
 
-readCallback :: MVar () -> IORef Int -> Fd -> [Event] -> IO ()
+readCallback :: MVar () -> IORef Int -> Fd -> Event -> IO ()
 readCallback done ref fd _ = do
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
   print ("read",fd,a)
@@ -64,7 +64,7 @@ readCallback done ref fd _ = do
     else do
       readByte fd
 
-writeCallback :: IORef Int -> Fd -> [Event] -> IO ()
+writeCallback :: IORef Int -> Fd -> Event -> IO ()
 writeCallback ref fd _ = do
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
   print ("write",fd,a)
@@ -91,8 +91,8 @@ main = do
     wref <- newIORef 0
     done <- newEmptyMVar
     forM_ pipePairs $ \(r,w) -> do
-      registerFd mgr (readCallback done rref r) r [Read]
-      registerFd mgr (writeCallback wref w) w [Write]
+      registerFd mgr (readCallback done rref r) r evtRead
+      registerFd mgr (writeCallback wref w) w evtWrite
 
     let pipeArray :: UArray Int Int32
         pipeArray = listArray (0, numPipes) . map fromIntegral $ pipes
