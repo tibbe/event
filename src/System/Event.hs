@@ -53,8 +53,8 @@ import qualified System.Event.EPoll  as Backend
 ------------------------------------------------------------------------
 -- Types
 
--- | Vector of I/O callbacks, indexed by file descriptor.
-type IOCallbacks = IntMap (Event -> IO ())
+-- | Callback invoked on I/O events.
+type IOCallback = Fd -> Event -> IO ()
 
 -- FIXME: choose a quicker time representation than UTCTime? We'll be calling
 -- "getCurrentTime" a lot.
@@ -66,7 +66,7 @@ type TimeoutTable    = TT.TimeoutTable TimeRep TimeoutKey TimeoutCallback
 -- | The event manager state.
 data EventManager = forall a. Backend a => EventManager
     { _elBackend      :: !a                     -- ^ Backend
-    , _elIOCallbacks  :: !(IORef IOCallbacks)   -- ^ I/O callbacks
+    , _elIOCallbacks  :: !(IORef (IntMap IOCallback))   -- ^ I/O callbacks
     , _elTimeoutTable :: !(IORef TimeoutTable)  -- ^ Timeout table
     }
 
@@ -123,9 +123,6 @@ loop mgr@(EventManager be _ tt) = go =<< getCurrentTime
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
 
--- | Callback invoked on I/O events.
-type IOCallback = Event -> IO ()
-
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
 -- on the file descriptor @fd@.  @cb@ is called for each event that
 -- occurs.
@@ -169,7 +166,7 @@ onFdEvent :: EventManager -> Fd -> Event -> IO ()
 onFdEvent (EventManager _ cbs' _) fd evs = do
     cbs <- readIORef cbs'
     case IM.lookup (fromIntegral fd) cbs of
-        Just cb -> cb evs
+        Just cb -> cb fd evs
         Nothing -> return ()  -- TODO: error?
 
 onTimeoutEvent :: EventManager -> TimeRep -> IO ()
