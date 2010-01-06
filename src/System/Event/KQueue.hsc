@@ -27,12 +27,12 @@ newtype EventQ = EventQ { unEventQ :: CInt }
     deriving (Eq, Show)
 
 data Event = Event {
-      ident  :: !CUIntPtr
-    , filter :: !Filter
-    , flags  :: !Flag
-    , fflags :: !CUInt
-    , data_  :: !CIntPtr
-    , udata  :: !(Ptr ())
+      ident  :: {-# UNPACK #-} !CUIntPtr
+    , filter :: {-# UNPACK #-} !Filter
+    , flags  :: {-# UNPACK #-} !Flag
+    , fflags :: {-# UNPACK #-} !CUInt
+    , data_  :: {-# UNPACK #-} !CIntPtr
+    , udata  :: {-# UNPACK #-} !(Ptr ())
     } deriving Show
 
 instance Storable Event where
@@ -92,8 +92,8 @@ combineFilters :: [Filter] -> Filter
 combineFilters = Filter . foldr ((.|.) . unFilter) 0
 
 data TimeSpec = TimeSpec {
-      tv_sec  :: !CTime
-    , tv_nsec :: !CLong
+      tv_sec  :: {-# UNPACK #-} !CTime
+    , tv_nsec :: {-# UNPACK #-} !CLong
     }
 
 instance Storable TimeSpec where
@@ -149,10 +149,10 @@ msToTimeSpec (Timeout ms) = TimeSpec (toEnum sec) (toEnum nanosec)
 -- Exported interface
 
 data EventQueue = EventQueue {
-      kq       :: !EventQ
-    , changes  :: !(A.Array Event)
-    , events   :: !(A.Array Event)
-    , eqWakeup :: !E.Wakeup
+      kq       :: {-# UNPACK #-} !EventQ
+    , changes  :: {-# UNPACK #-} !(A.Array Event)
+    , events   :: {-# UNPACK #-} !(A.Array Event)
+    , eqWakeup :: {-# UNPACK #-} !E.Wakeup
     }
 
 instance E.Backend EventQueue where
