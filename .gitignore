@@ -1,6 +1,9 @@
 *~
+*#
+.#*
 dist/*
 .hpc/*
+.*.swp
 *.hi
 *.o
 Setup.exe*

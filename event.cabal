@@ -31,10 +31,9 @@ library
 
   build-depends:
     array,
-    base < 4.1,
-    containers == 0.2.*,
+    base < 5,
+    containers,
     ghc-prim,
-    old-locale,
     time < 1.2,
     unix
 
@@ -69,8 +68,8 @@ Executable test
 
   build-depends:
     array,
-    base < 4.1,
-    containers == 0.2.*,
+    base < 5,
+    containers,
     ghc-prim,
     HUnit < 1.3,
     old-locale,
