@@ -56,21 +56,21 @@ defaultOptions = [
 readCallback :: MVar () -> IORef Int -> Fd -> [Event] -> IO ()
 readCallback done ref fd _ = do
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
+  print ("read",fd,a)
   if a > 10
     then do
       close fd
       putMVar done ()
     else do
-      print ("read",fd)
       readByte fd
 
 writeCallback :: IORef Int -> Fd -> [Event] -> IO ()
 writeCallback ref fd _ = do
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
+  print ("write",fd,a)
   if a > 10
     then close fd
     else do
-      print ("write",fd)
       writeByte fd
 
 main :: IO ()
