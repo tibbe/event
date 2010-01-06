@@ -27,7 +27,7 @@ module System.Event
 ------------------------------------------------------------------------
 -- Imports
 
-import Control.Monad (sequence_)
+import Control.Monad (liftM3, sequence_)
 import Data.IntMap as IM
 import Data.IORef
 import Data.Maybe (maybe)
@@ -73,21 +73,14 @@ data EventManager = forall a. Backend a => EventManager
 
 -- | Create a new event manager.
 new :: IO EventManager
-new = do
-    be <- Backend.new
-    cbs <- newIORef empty
-    tms <- newIORef TT.empty
-    return $ EventManager be cbs tms
+new = liftM3 EventManager Backend.new (newIORef empty) (newIORef TT.empty)
 
 ------------------------------------------------------------------------
 -- Event loop
 
 -- | Start handling events.  This function never returns.
 loop :: EventManager -> IO ()
-loop mgr@(EventManager be _ tt) = do
-    now <- getCurrentTime
-    go now
-
+loop mgr@(EventManager be _ tt) = go =<< getCurrentTime
   where
     go now = do
         timeout <- mkTimeout now

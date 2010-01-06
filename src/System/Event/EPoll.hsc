@@ -4,10 +4,11 @@ module System.Event.EPoll where
 
 #include <sys/epoll.h>
 
-import Control.Monad (liftM, liftM3, when)
+import Control.Monad (liftM3, when)
 import Data.Bits ((.|.))
+import Data.Word (Word32)
 import Foreign.C.Error (throwErrnoIfMinus1, throwErrnoIfMinus1_)
-import Foreign.C.Types (CInt, CUInt)
+import Foreign.C.Types (CInt)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable(..))
@@ -16,82 +17,6 @@ import System.Posix.Types (Fd(..))
 import qualified System.Event.Array    as A
 import qualified System.Event.Internal as E
 import           System.Event.Internal (Timeout(..))
-
-newtype EPollFd = EPollFd CInt
-
-data Event = Event {
-      eventTypes :: EventType
-    , eventFd    :: Fd
-    } deriving (Show)
-
-instance Storable Event where
-    sizeOf    _ = #size struct epoll_event
-    alignment _ = alignment (undefined :: CInt)
-
-    peek ptr = do
-        ets <- #{peek struct epoll_event, events} ptr
-        ed  <- #{peek struct epoll_event, data}   ptr
-        return $ Event (EventType ets) ed
-
-    poke ptr e = do
-        #{poke struct epoll_event, events} ptr (unEventType $ eventTypes e)
-        #{poke struct epoll_event, data}   ptr (eventFd e)
-
-newtype ControlOp = ControlOp CInt
-
-#{enum ControlOp, ControlOp
- , controlOpAdd    = EPOLL_CTL_ADD
- , controlOpModify = EPOLL_CTL_MOD
- , controlOpDelete = EPOLL_CTL_DEL
- }
-
-newtype EventType = EventType {
-      unEventType :: CUInt
-    } deriving (Show)
-
-#{enum EventType, EventType
- , eventTypeReadyForRead           = EPOLLIN
- , eventTypeReadyForWrite          = EPOLLOUT
- , eventTypePeerClosedConnection   = EPOLLRDHUP
- , eventTypeUrgentDataReadyForRead = EPOLLPRI
- , eventTypeError                  = EPOLLERR
- , eventTypeHangup                 = EPOLLHUP
- , eventTypeEdgeTriggered          = EPOLLET
- , eventTypeOneShot                = EPOLLONESHOT
- }
-
-combineEventTypes :: [EventType] -> EventType
-combineEventTypes = EventType . foldr ((.|.) . unEventType) 0
-
-foreign import ccall unsafe "sys/epoll.h epoll_create"
-    c_epoll_create :: CInt -> IO CInt
-
-foreign import ccall unsafe "sys/epoll.h epoll_ctl"
-    c_epoll_ctl :: CInt -> CInt -> CInt -> Ptr Event -> IO CInt
-
-foreign import ccall unsafe "sys/epoll.h epoll_wait"
-    c_epoll_wait :: CInt -> Ptr Event -> CInt -> CInt -> IO CInt
-
-epollCreate :: IO EPollFd
-epollCreate =
-    fmap EPollFd .
-    throwErrnoIfMinus1 "epollCreate" $
-    c_epoll_create size
-  where
-    -- From manpage EPOLL_CREATE(2): "Since Linux 2.6.8, the size argument is
-    -- unused. (The kernel dynamically sizes the required data structures
-    -- without needing this initial hint.)" We pass 256 because libev does.
-    size = 256 :: CInt
-
-epollControl :: EPollFd -> ControlOp -> Fd -> Ptr Event -> IO ()
-epollControl (EPollFd epfd) (ControlOp op) (Fd fd) event =
-    throwErrnoIfMinus1_ "epollControl" $ c_epoll_ctl epfd op fd event
-
-epollWait :: EPollFd -> Ptr Event -> Int -> Int -> IO Int
-epollWait (EPollFd epfd) events numEvents timeout =
-    fmap fromIntegral .
-    throwErrnoIfMinus1 "epollWait" $
-    c_epoll_wait epfd events (fromIntegral numEvents) (fromIntegral timeout)
 
 data EPoll = EPoll {
       epollFd     :: !EPollFd
@@ -142,10 +67,70 @@ poll ep timeout f = do
 wakeup :: EPoll -> E.WakeupMessage -> IO ()
 wakeup ep = E.writeWakeupMessage (epollWakeup ep)
 
+newtype EPollFd = EPollFd CInt
+
+data Event = Event {
+      eventTypes :: EventType
+    , eventFd    :: Fd
+    } deriving (Show)
+
+instance Storable Event where
+    sizeOf    _ = #size struct epoll_event
+    alignment _ = alignment (undefined :: CInt)
+
+    peek ptr = do
+        ets <- #{peek struct epoll_event, events} ptr
+        ed  <- #{peek struct epoll_event, data.fd}   ptr
+        return $ Event (EventType ets) ed
+
+    poke ptr e = do
+        #{poke struct epoll_event, events} ptr (unEventType $ eventTypes e)
+        #{poke struct epoll_event, data.fd}   ptr (eventFd e)
+
+newtype ControlOp = ControlOp CInt
+
+#{enum ControlOp, ControlOp
+ , controlOpAdd    = EPOLL_CTL_ADD
+ , controlOpModify = EPOLL_CTL_MOD
+ , controlOpDelete = EPOLL_CTL_DEL
+ }
+
+newtype EventType = EventType {
+      unEventType :: Word32
+    } deriving (Show)
+
+combineEventTypes :: [EventType] -> EventType
+combineEventTypes = EventType . foldr ((.|.) . unEventType) 0
+
+epollCreate :: IO EPollFd
+epollCreate =
+    fmap EPollFd .
+    throwErrnoIfMinus1 "epollCreate" $
+    c_epoll_create 256 -- argument is ignored
+
+epollControl :: EPollFd -> ControlOp -> Fd -> Ptr Event -> IO ()
+epollControl (EPollFd epfd) (ControlOp op) (Fd fd) event =
+    throwErrnoIfMinus1_ "epollControl" $ c_epoll_ctl epfd op fd event
+
+epollWait :: EPollFd -> Ptr Event -> Int -> Int -> IO Int
+epollWait (EPollFd epfd) events numEvents timeout =
+    fmap fromIntegral .
+    throwErrnoIfMinus1 "epollWait" $
+    c_epoll_wait epfd events (fromIntegral numEvents) (fromIntegral timeout)
+
 fromEvent :: E.Event -> EventType
-fromEvent E.Read  = eventTypeReadyForRead
-fromEvent E.Write = eventTypeReadyForWrite
+fromEvent E.Read  = EventType #const EPOLLIN
+fromEvent E.Write = EventType #const EPOLLOUT
 
 fromTimeout :: Timeout -> Int
 fromTimeout Forever      = -1
 fromTimeout (Timeout ms) = fromIntegral ms
+
+foreign import ccall unsafe "sys/epoll.h epoll_create"
+    c_epoll_create :: CInt -> IO CInt
+
+foreign import ccall unsafe "sys/epoll.h epoll_ctl"
+    c_epoll_ctl :: CInt -> CInt -> CInt -> Ptr Event -> IO CInt
+
+foreign import ccall unsafe "sys/epoll.h epoll_wait"
+    c_epoll_wait :: CInt -> Ptr Event -> CInt -> CInt -> IO CInt
