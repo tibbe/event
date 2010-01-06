@@ -105,14 +105,19 @@ snoc arr@(Array ref) e = do
     writeIORef ref (AC es len' cap)
 
 mapM_ :: Storable a => Array a -> (a -> IO ()) -> IO ()
-mapM_ (Array ref) f = do
-    AC es len _ <- readIORef ref
-    let loop n
-            | n == len = return ()
-            | otherwise = do
-                  peek (es `plusPtr` n) >>= f
-                  loop (succ n)
-    loop 0
+mapM_ ary g = mapHack ary g undefined
+  where
+    mapHack :: Storable b => Array b -> (b -> IO ()) -> b -> IO ()
+    mapHack (Array ref) f dummy = do
+      AC es len _ <- readIORef ref
+      let size = sizeOf dummy
+          offset = len * size
+      let loop n
+              | n >= offset = return ()
+              | otherwise = do
+                    f =<< peek (es `plusPtr` n)
+                    loop (n + size)
+      loop 0
 
 firstPowerOf2 :: Int -> Int
 firstPowerOf2 n
