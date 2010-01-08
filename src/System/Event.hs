@@ -27,7 +27,6 @@ import Control.Concurrent (forkIO)
 import Control.Monad (sequence_, when)
 import Data.IntMap as IM
 import Data.IORef
-import Data.Maybe (maybe)
 import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime,
                         getCurrentTime)
 import Data.Unique
@@ -133,17 +132,15 @@ loop mgr@(EventManager be _ tt run _) = go =<< getCurrentTime
     mkTimeout now = do
         tt' <- readIORef tt
 
-        let mbOldest = TT.findOldest tt'
-
         -- If there are expired items in the timeout table then we
         -- need to run the callback now; normally this would be
         -- handled within I.poll but it could happen if e.g. one of
         -- the timeout callbacks took a long time
-        maybe (return Forever)
-              (\(tm,_,_) -> maybe (timeoutCallback now >> mkTimeout now)
-                                  return
-                                  (inMs $ diffUTCTime tm now))
-              mbOldest
+        case TT.findOldest tt' of
+          Nothing       -> return Forever
+          Just (tm,_,_) -> case inMs (diffUTCTime tm now) of
+                             Nothing -> timeoutCallback now >> mkTimeout now
+                             Just t  -> return t
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
