@@ -146,15 +146,18 @@ singleton k p = Winner (E k p) Start k
 
 -- | /O(log n)/ Insert a binding into the queue.
 insert :: Key -> Prio -> PSQ -> PSQ
-insert k p q = case tourView q of
-    Null -> singleton k p
-    Single (E k' p') -> case compare k k' of
+insert k p q = case q of
+    Void -> singleton k p
+    Winner (E k' p') Start _ -> case compare k k' of
         LT -> singleton k  p  `play` singleton k' p'
         EQ -> singleton k  p
         GT -> singleton k' p' `play` singleton k  p
-    tl `Play` tr
-        | k <= maxKey tl -> insert k p tl `play` tr
-        | otherwise      -> tl `play` insert k p tr
+    Winner e (RLoser _ e' tl m tr) m'
+        | k <= m    -> insert k p (Winner e tl m) `play` (Winner e' tr m')
+        | otherwise -> (Winner e tl m) `play` insert k p (Winner e' tr m')
+    Winner e (LLoser _ e' tl m tr) m'
+        | k <= m    -> insert k p (Winner e' tl m) `play` (Winner e tr m')
+        | otherwise -> (Winner e' tl m) `play` insert k p (Winner e tr m')
 
 ------------------------------------------------------------------------
 -- Delete/Update
