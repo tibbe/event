@@ -9,7 +9,7 @@ import Control.Monad (liftM2, when)
 import Data.Bits ((.|.), (.&.))
 import Data.Monoid (Monoid(..))
 import Data.Word (Word32)
-import Foreign.C.Error (throwErrnoIfMinus1, throwErrnoIfMinus1Retry, throwErrnoIfMinus1_)
+import Foreign.C.Error (throwErrnoIfMinus1, throwErrnoIfMinus1_)
 import Foreign.C.Types (CInt)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr)
@@ -111,7 +111,7 @@ epollControl (EPollFd epfd) (ControlOp op) (Fd fd) event =
 epollWait :: EPollFd -> Ptr Event -> Int -> Int -> IO Int
 epollWait (EPollFd epfd) events numEvents timeout =
     fmap fromIntegral .
-    throwErrnoIfMinus1Retry "epollWait" $
+    throwErrnoIfMinus1 "epollWait" $
     c_epoll_wait epfd events (fromIntegral numEvents) (fromIntegral timeout)
 
 fromEvent :: E.Event -> EventType
