@@ -153,19 +153,16 @@ data EventQueue = EventQueue {
       kq       :: {-# UNPACK #-} !EventQ
     , changes  :: {-# UNPACK #-} !(A.Array Event)
     , events   :: {-# UNPACK #-} !(A.Array Event)
-    , eqWakeup :: {-# UNPACK #-} !E.Wakeup
     }
 
 instance E.Backend EventQueue where
     new          = new
     poll         = poll
     set q fd evs = set q fd (fromEvent evs) flagAdd
-    wakeup       = wakeup
 
 new :: IO EventQueue
 new = do
-    eq <- liftM4 EventQueue kqueue A.empty (A.new 64) E.createWakeup
-    set eq (E.wakeupReadFd . eqWakeup $ eq) filterRead flagAdd
+    eq <- liftM3 EventQueue kqueue A.empty (A.new 64)
     return eq
 
 set :: EventQueue -> Fd -> Filter -> Flag -> IO ()
@@ -192,13 +189,10 @@ poll q tout f = do
         when (res == eventsLen) $ do
             A.ensureCapacity (events q) (2 * eventsLen)
 
-        A.mapM_ (events q) $ \e ->
+        A.forM_ (events q) $ \e -> do
             f (fromIntegral . ident $ e) (toEvent . filter $ e)
 
         return E.Activity
-
-wakeup :: EventQueue -> E.WakeupMessage -> IO ()
-wakeup ep = E.writeWakeupMessage (eqWakeup ep)
 
 fromEvent :: E.Event -> Filter
 fromEvent e = Filter (remap E.evtRead (#const EVFILT_READ) .|.

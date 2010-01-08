@@ -3,16 +3,20 @@
 module System.Event.EPoll where
 
 #include <sys/epoll.h>
+#include "EventConfig.h"
 
-import Control.Monad (liftM3, when)
+import Control.Monad (liftM2, when)
 import Data.Bits ((.|.), (.&.))
 import Data.Monoid (Monoid(..))
 import Data.Word (Word32)
-import Foreign.C.Error (throwErrnoIfMinus1, throwErrnoIfMinus1_)
+import Foreign.C.Error (throwErrnoIfMinus1, throwErrnoIfMinus1Retry, throwErrnoIfMinus1_)
 import Foreign.C.Types (CInt)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable(..))
+#if !defined(HAVE_EPOLL_CREATE1)
+import System.Posix.Internals (setCloseOnExec)
+#endif
 import System.Posix.Types (Fd(..))
 
 import qualified System.Event.Array    as A
@@ -22,20 +26,15 @@ import           System.Event.Internal (Timeout(..))
 data EPoll = EPoll {
       epollFd     :: !EPollFd
     , epollEvents :: !(A.Array Event)
-    , epollWakeup :: !E.Wakeup
     }
 
 instance E.Backend EPoll where
     new    = new
     set    = set
     poll   = poll
-    wakeup = undefined
 
 new :: IO EPoll
-new = do
-  ep <- liftM3 EPoll epollCreate (A.new 64) E.createWakeup
-  set ep (E.wakeupReadFd . epollWakeup $ ep) E.evtRead
-  return ep
+new = liftM2 EPoll epollCreate (A.new 64)
 
 set :: EPoll -> Fd -> E.Event -> IO ()
 set ep fd events = with e $ epollControl (epollFd ep) controlOpAdd fd
@@ -58,12 +57,9 @@ poll ep timeout f = do
         cap <- A.capacity events
         when (n == cap) $ A.ensureCapacity events (2 * cap)
 
-        A.mapM_ events $ \e -> f (eventFd e) (toEvent (eventTypes e))
+        A.forM_ events $ \e -> f (eventFd e) (toEvent (eventTypes e))
 
         return E.Activity
-
-wakeup :: EPoll -> E.WakeupMessage -> IO ()
-wakeup ep = E.writeWakeupMessage (epollWakeup ep)
 
 newtype EPollFd = EPollFd CInt
 
@@ -98,10 +94,15 @@ newtype EventType = EventType {
     } deriving (Show)
 
 epollCreate :: IO EPollFd
-epollCreate =
-    fmap EPollFd .
-    throwErrnoIfMinus1 "epollCreate" $
-    c_epoll_create 256 -- argument is ignored
+epollCreate = do
+  fd <- throwErrnoIfMinus1 "epollCreate" $
+#if defined(HAVE_EPOLL_CREATE1)
+        c_epoll_create1 (#const EPOLL_CLOEXEC)
+#else
+        c_epoll_create 256 -- argument is ignored
+  setCloseOnExec fd
+#endif
+  return (EPollFd fd)
 
 epollControl :: EPollFd -> ControlOp -> Fd -> Ptr Event -> IO ()
 epollControl (EPollFd epfd) (ControlOp op) (Fd fd) event =
@@ -110,7 +111,7 @@ epollControl (EPollFd epfd) (ControlOp op) (Fd fd) event =
 epollWait :: EPollFd -> Ptr Event -> Int -> Int -> IO Int
 epollWait (EPollFd epfd) events numEvents timeout =
     fmap fromIntegral .
-    throwErrnoIfMinus1 "epollWait" $
+    throwErrnoIfMinus1Retry "epollWait" $
     c_epoll_wait epfd events (fromIntegral numEvents) (fromIntegral timeout)
 
 fromEvent :: E.Event -> EventType
@@ -131,11 +132,16 @@ fromTimeout :: Timeout -> Int
 fromTimeout Forever      = -1
 fromTimeout (Timeout ms) = fromIntegral ms
 
+#if defined(HAVE_EPOLL_CREATE1)
+foreign import ccall unsafe "sys/epoll.h epoll_create1"
+    c_epoll_create1 :: CInt -> IO CInt
+#else
 foreign import ccall unsafe "sys/epoll.h epoll_create"
     c_epoll_create :: CInt -> IO CInt
+#endif
 
 foreign import ccall unsafe "sys/epoll.h epoll_ctl"
     c_epoll_ctl :: CInt -> CInt -> CInt -> Ptr Event -> IO CInt
 
-foreign import ccall unsafe "sys/epoll.h epoll_wait"
+foreign import ccall safe "sys/epoll.h epoll_wait"
     c_epoll_wait :: CInt -> Ptr Event -> CInt -> CInt -> IO CInt

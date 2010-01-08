@@ -12,7 +12,7 @@ module System.Event.Array
       ensureCapacity,
       useAsPtr,
       snoc,
-      mapM_
+      forM_
     ) where
 
 import Control.Monad (when)
@@ -104,11 +104,11 @@ snoc arr@(Array ref) e = do
     AC es _ cap <- readIORef ref
     writeIORef ref (AC es len' cap)
 
-mapM_ :: Storable a => Array a -> (a -> IO ()) -> IO ()
-mapM_ ary g = mapHack ary g undefined
+forM_ :: Storable a => Array a -> (a -> IO ()) -> IO ()
+forM_ ary g = forHack ary g undefined
   where
-    mapHack :: Storable b => Array b -> (b -> IO ()) -> b -> IO ()
-    mapHack (Array ref) f dummy = do
+    forHack :: Storable b => Array b -> (b -> IO ()) -> b -> IO ()
+    forHack (Array ref) f dummy = do
       AC es len _ <- readIORef ref
       let size = sizeOf dummy
           offset = len * size
