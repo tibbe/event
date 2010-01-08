@@ -24,7 +24,7 @@ module System.Event
 -- Imports
 
 import Control.Concurrent (forkIO)
-import Control.Monad (sequence_, when)
+import Control.Monad (when)
 import Data.IntMap as IM
 import Data.IORef
 import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime,
@@ -96,7 +96,7 @@ new = do
   registerFd_ mgr (handleControlEvent mgr) read_fd evtRead
   when (read_fd /= event_fd) $
     registerFd_ mgr (handleControlEvent mgr) event_fd evtRead
-  forkIO $ loop mgr
+  _ <- forkIO $ loop mgr
   return mgr
 
 ------------------------------------------------------------------------

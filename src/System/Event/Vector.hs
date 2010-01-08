@@ -160,7 +160,7 @@ reserveC (C marr# cap (I# len#)) n
         case copy 0# s2# of { s3# ->
         (# s3#, () #) }}
     where
-      (I# newCap#) = nextCap n
+      !(I# newCap#) = nextCap n
 
 -- TODO: Grow capacity in a way that is efficient given GHC's
 -- allocator.
