@@ -4,11 +4,12 @@ module System.Event.KQueue where
 
 import Control.Monad
 import Data.Bits
+import Data.Monoid (Monoid(..))
 import Foreign.C.Error
 import Foreign.C.Types
+import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Foreign.Storable
-import Foreign.Marshal.Alloc
 import Prelude hiding (filter)
 import System.Posix.Types (Fd(..))
 
@@ -27,12 +28,12 @@ newtype EventQ = EventQ { unEventQ :: CInt }
     deriving (Eq, Show)
 
 data Event = Event {
-      ident  :: !CUIntPtr
-    , filter :: !Filter
-    , flags  :: !Flag
-    , fflags :: !CUInt
-    , data_  :: !CIntPtr
-    , udata  :: !(Ptr ())
+      ident  :: {-# UNPACK #-} !CUIntPtr
+    , filter :: {-# UNPACK #-} !Filter
+    , flags  :: {-# UNPACK #-} !Flag
+    , fflags :: {-# UNPACK #-} !CUInt
+    , data_  :: {-# UNPACK #-} !CIntPtr
+    , udata  :: {-# UNPACK #-} !(Ptr ())
     } deriving Show
 
 instance Storable Event where
@@ -92,8 +93,8 @@ combineFilters :: [Filter] -> Filter
 combineFilters = Filter . foldr ((.|.) . unFilter) 0
 
 data TimeSpec = TimeSpec {
-      tv_sec  :: !CTime
-    , tv_nsec :: !CLong
+      tv_sec  :: {-# UNPACK #-} !CTime
+    , tv_nsec :: {-# UNPACK #-} !CLong
     }
 
 instance Storable TimeSpec where
@@ -149,15 +150,15 @@ msToTimeSpec (Timeout ms) = TimeSpec (toEnum sec) (toEnum nanosec)
 -- Exported interface
 
 data EventQueue = EventQueue {
-      kq       :: !EventQ
-    , changes  :: !(A.Array Event)
-    , events   :: !(A.Array Event)
+      kq       :: {-# UNPACK #-} !EventQ
+    , changes  :: {-# UNPACK #-} !(A.Array Event)
+    , events   :: {-# UNPACK #-} !(A.Array Event)
     }
 
 instance E.Backend EventQueue where
     new          = new
     poll         = poll
-    set q fd evs = set q fd (combineFilters $ map fromEvent evs) flagAdd
+    set q fd evs = set q fd (fromEvent evs) flagAdd
 
 new :: IO EventQueue
 new = do
@@ -170,7 +171,7 @@ set q fd fltr flg =
 
 poll :: EventQueue
      -> Timeout
-     -> (Fd -> [E.Event] -> IO ())
+     -> (Fd -> E.Event -> IO ())
      -> IO E.Result
 poll q tout f = do
     changesLen <- A.length (changes q)
@@ -189,15 +190,20 @@ poll q tout f = do
             A.ensureCapacity (events q) (2 * eventsLen)
 
         A.forM_ (events q) $ \e -> do
-            let fd   = fromIntegral (ident e)
-                filt = filter e
-                evs  = if filt == filterRead then [E.Read]
-                       else if filt == filterWrite then [E.Write]
-                            else []
-            f fd evs
+            f (fromIntegral . ident $ e) (toEvent . filter $ e)
 
         return E.Activity
 
 fromEvent :: E.Event -> Filter
-fromEvent E.Read  = filterRead
-fromEvent E.Write = filterWrite
+fromEvent e = Filter (remap E.evtRead (#const EVFILT_READ) .|.
+                      remap E.evtWrite (#const EVFILT_WRITE))
+  where remap evt to
+            | e `E.eventIs` evt = to
+            | otherwise         = 0
+
+toEvent :: Filter -> E.Event
+toEvent (Filter f) = remap (#const EVFILT_READ)  E.evtRead `mappend`
+                     remap (#const EVFILT_WRITE) E.evtWrite
+  where remap evt to
+            | f .&. evt /= 0 = to
+            | otherwise      = mempty
