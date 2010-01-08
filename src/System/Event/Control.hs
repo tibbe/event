@@ -97,7 +97,7 @@ readControlMessage w fd
                     throwErrnoIfMinus1_ "readControlMessage" $
                       c_read (fromIntegral fd) p 1
                     (toEnum . fromIntegral) `fmap` peek p
-                                    
+
 sendWakeup :: Control -> IO ()
 #if defined(HAVE_EVENTFD)
 sendWakeup c = alloca $ \p -> do
@@ -105,7 +105,7 @@ sendWakeup c = alloca $ \p -> do
   throwErrnoIfMinus1_ "writeControlMessage" $
     c_write (fromIntegral (controlEventFd c)) (castPtr p) 8
 #else
-sendWakeup c = sendControlMessage c cmsgWakeup
+sendWakeup c = sendControlMessage c CMsgWakeup
 #endif
 
 sendDie :: Control -> IO ()
