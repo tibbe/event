@@ -113,7 +113,7 @@ instance Storable TimeSpec where
 foreign import ccall unsafe "event.h kqueue"
     c_kqueue :: IO EventQ
 
-foreign import ccall unsafe "event.h kevent"
+foreign import ccall safe "event.h kevent"
     c_kevent :: EventQ -> Ptr Event -> CInt -> Ptr Event -> CInt
              -> Ptr TimeSpec -> IO CInt
 
