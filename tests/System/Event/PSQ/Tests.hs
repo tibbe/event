@@ -11,11 +11,12 @@ import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck (testProperty)
 import Test.QuickCheck
 
-instance Arbitrary PSQ where
+instance Arbitrary a => Arbitrary (PSQ a) where
     arbitrary = do
         ks <- arbitrary
         ps <- arbitrary
-        return . Q.fromList $ zipWith E ks ps
+        vs <- arbitrary
+        return . Q.fromList $ zipWith3 E ks ps vs
 
 tests :: Test
 tests = testGroup "System.Event.PSQ"  testlist
@@ -27,20 +28,21 @@ testlist =
     , testProperty "min" propMin
     ]
 
-propMin xs =
+propMin (xs :: [(Q.Key, Q.Prio, Int)]) =
     case (findMin $ fromList xs, Q.findMin q) of
         (Nothing, Nothing)      -> True
-        (Just p, Just (E k p')) -> p == p'
-        _                       -> False
-  where q = Q.fromList . map (\(k, p) -> E k p) $ xs
+        (Just (k, p, v), Just (E k' p' v')) ->
+            k == k' && p == p' && v == v'
+        _                                   -> False
+  where q = Q.fromList . map (\(k, p, v) -> E k p v) $ xs
 
-propInsert k p q =
-    case Q.lookup k (Q.insert k p q) of
-        Just p' -> p == p'
-        _       -> False
+propInsert k p (v :: Int) q =
+    case Q.lookup k (Q.insert k p v q) of
+        Just (p', v') -> p == p' && v == v'
+        _             -> False
 
-propDelete k p q =
-    case Q.lookup k (Q.delete k (Q.insert k p q)) of
+propDelete k p (v :: Int) q =
+    case Q.lookup k (Q.delete k (Q.insert k p v q)) of
         Just _ -> False
         _      -> True
 
@@ -49,20 +51,27 @@ propDelete k p q =
 
 -- A priority queue model. Keys are uniqueue and kept in ascending
 -- order.
-type Model = [(Q.Key, Q.Prio)]
+type Model a = [(Q.Key, Q.Prio, a)]
 
-cmpKey :: (Q.Key, Q.Prio) -> (Q.Key, Q.Prio) -> Ordering
-cmpKey = compare `on` fst
+fst3 (x, _, _) = x
+snd3 (_, x, _) = x
 
-eqKey :: (Q.Key, Q.Prio) -> (Q.Key, Q.Prio) -> Bool
-eqKey = (==) `on` fst
+cmpKey :: (Q.Key, Q.Prio, a) -> (Q.Key, Q.Prio, a) -> Ordering
+cmpKey = compare `on` fst3
 
-insert :: Q.Key -> Q.Prio -> Model -> Model
-insert k p q = L.insertBy cmpKey (k, p) (L.deleteBy eqKey (k, undefined) q)
+cmpPrio :: (Q.Key, Q.Prio, a) -> (Q.Key, Q.Prio, a) -> Ordering
+cmpPrio = compare `on` snd3
 
-fromList :: [(Q.Key, Q.Prio)] -> Model
-fromList = foldr (\(k, p) q -> insert k p q) []
+eqKey :: (Q.Key, Q.Prio, a) -> (Q.Key, Q.Prio, a) -> Bool
+eqKey = (==) `on` fst3
 
-findMin :: Model -> Maybe Q.Prio
+insert :: Q.Key -> Q.Prio -> a -> Model a -> Model a
+insert k p v q = L.insertBy cmpKey (k, p, v)
+                 (L.deleteBy eqKey (k, undefined, undefined) q)
+
+fromList :: [(Q.Key, Q.Prio, a)] -> Model a
+fromList = foldr (\(k, p, v) q -> insert k p v q) []
+
+findMin :: Model a -> Maybe (Q.Key, Q.Prio, a)
 findMin [] = Nothing
-findMin xs = Just $ L.minimum (map snd xs)
+findMin xs = Just $ L.minimumBy cmpPrio xs

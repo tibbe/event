@@ -89,43 +89,43 @@ import Prelude hiding (lookup, null, foldl, foldr)
 import qualified Prelude as P
 
 -- | @E k p@ binds the key @k@ with the priority @p@.
-data Elem = E
+data Elem a = E
     { key   :: {-# UNPACK #-} !Key
     , prio  :: {-# UNPACK #-} !Prio
+    , value :: a
     } deriving Show
 
 ------------------------------------------------------------------------
-
 -- | A mapping from keys @k@ to priorites @p@.
 
 type Prio = Int
 type Key = Int
 
-data PSQ = Void
-         | Winner {-# UNPACK #-} !Elem
-                  !LTree
-                  {-# UNPACK #-} !Key  -- max key
+data PSQ a = Void
+           | Winner {-# UNPACK #-} !(Elem a)
+                    !(LTree a)
+                    {-# UNPACK #-} !Key  -- max key
 
-instance Show PSQ where
+instance Show a => Show (PSQ a) where
     show = show . map show . toAscList
 
 -- | /O(1)/ The number of bindings in a queue.
-size :: PSQ -> Int
+size :: PSQ a -> Int
 size Void            = 0
 size (Winner _ lt _) = 1 + size' lt
 
 -- | /O(1)/ True if the queue is empty.
-null :: PSQ -> Bool
+null :: PSQ a -> Bool
 null Void           = True
 null (Winner _ _ _) = False
 
 -- | /O(log n)/ The priority of a given key, or Nothing if the key is
 -- not bound.
-lookup :: Key -> PSQ -> Maybe Prio
+lookup :: Key -> PSQ a -> Maybe (Prio, a)
 lookup k q = case tourView q of
     Null -> Nothing
-    Single (E k' p)
-        | k == k'   -> Just p
+    Single (E k' p v)
+        | k == k'   -> Just (p, v)
         | otherwise -> Nothing
     tl `Play` tr
         | k <= maxKey tl -> lookup k tl
@@ -134,52 +134,52 @@ lookup k q = case tourView q of
 ------------------------------------------------------------------------
 -- Construction
 
-empty :: PSQ
+empty :: PSQ a
 empty = Void
 
 -- | O(1) Build a queue with one binding.
-singleton :: Key -> Prio -> PSQ
-singleton k p = Winner (E k p) Start k
+singleton :: Key -> Prio -> a -> PSQ a
+singleton k p v = Winner (E k p v) Start k
 
 ------------------------------------------------------------------------
 -- Insertion
 
 -- | /O(log n)/ Insert a binding into the queue.
-insert :: Key -> Prio -> PSQ -> PSQ
-insert k p q = case q of
-    Void -> singleton k p
-    Winner (E k' p') Start _ -> case compare k k' of
-        LT -> singleton k  p  `play` singleton k' p'
-        EQ -> singleton k  p
-        GT -> singleton k' p' `play` singleton k  p
+insert :: Key -> Prio -> a -> PSQ a -> PSQ a
+insert k p v q = case q of
+    Void -> singleton k p v
+    Winner (E k' p' v') Start _ -> case compare k k' of
+        LT -> singleton k  p  v  `play` singleton k' p' v'
+        EQ -> singleton k  p  v
+        GT -> singleton k' p' v' `play` singleton k  p  v
     Winner e (RLoser _ e' tl m tr) m'
-        | k <= m    -> insert k p (Winner e tl m) `play` (Winner e' tr m')
-        | otherwise -> (Winner e tl m) `play` insert k p (Winner e' tr m')
+        | k <= m    -> insert k p v (Winner e tl m) `play` (Winner e' tr m')
+        | otherwise -> (Winner e tl m) `play` insert k p v (Winner e' tr m')
     Winner e (LLoser _ e' tl m tr) m'
-        | k <= m    -> insert k p (Winner e' tl m) `play` (Winner e tr m')
-        | otherwise -> (Winner e' tl m) `play` insert k p (Winner e tr m')
+        | k <= m    -> insert k p v (Winner e' tl m) `play` (Winner e tr m')
+        | otherwise -> (Winner e' tl m) `play` insert k p v (Winner e tr m')
 
 ------------------------------------------------------------------------
 -- Delete/Update
 
 -- | /O(log n)/ Remove a binding from the queue.
-delete :: Key -> PSQ -> PSQ
+delete :: Key -> PSQ a -> PSQ a
 delete k q = case tourView q of
     Null -> empty
-    Single (E k' p)
+    Single (E k' p v)
         | k == k'   -> empty
-        | otherwise -> singleton k' p
+        | otherwise -> singleton k' p v
     tl `Play` tr
         | k <= maxKey tl -> delete k tl `play` tr
         | otherwise      -> tl `play` delete k tr
 
 -- | /O(log n)/ Adjust the priority of a key.
-adjust :: (Prio -> Prio) -> Key -> PSQ -> PSQ
+adjust :: (Prio -> Prio) -> Key -> PSQ a -> PSQ a
 adjust f k q = case tourView q of
     Null -> empty
-    Single (E k' p)
-        | k == k'   -> singleton k' (f p)
-        | otherwise -> singleton k' p
+    Single (E k' p v)
+        | k == k'   -> singleton k' (f p) v
+        | otherwise -> singleton k' p v
     tl `Play` tr
         | k <= maxKey tl -> adjust f k tl `unsafePlay` tr
         | otherwise      -> tl `unsafePlay` adjust f k tr
@@ -188,28 +188,28 @@ adjust f k q = case tourView q of
 -- Conversion
 
 -- | /O(n log n)/ Build a queue from a list of bindings.
-fromList :: [Elem] -> PSQ
-fromList = P.foldr (\(E k p) q -> insert k p q) empty
+fromList :: [Elem a] -> PSQ a
+fromList = P.foldr (\(E k p v) q -> insert k p v q) empty
 
 -- | /O(n)/ Convert a queue to a list.
-toList :: PSQ -> [Elem]
+toList :: PSQ a -> [Elem a]
 toList = toAscList
 
 -- | /O(n)/ Convert a queue to a list in ascending order of keys.
-toAscList :: PSQ -> [Elem]
+toAscList :: PSQ a -> [Elem a]
 toAscList q  = seqToList (toAscLists q)
 
-toAscLists :: PSQ -> Sequ Elem
+toAscLists :: PSQ a -> Sequ (Elem a)
 toAscLists q = case tourView q of
     Null         -> emptySequ
     Single e     -> singleSequ e
     tl `Play` tr -> toAscLists tl <> toAscLists tr
 
 -- | /O(n)/ Convert a queue to a list in descending order of keys.
-toDescList :: PSQ -> [ Elem ]
+toDescList :: PSQ a -> [ Elem a ]
 toDescList q = seqToList (toDescLists q)
 
-toDescLists :: PSQ -> Sequ Elem
+toDescLists :: PSQ a -> Sequ (Elem a)
 toDescLists q = case tourView q of
     Null         -> emptySequ
     Single e     -> singleSequ e
@@ -219,22 +219,22 @@ toDescLists q = case tourView q of
 -- Min
 
 -- | /O(1)/ The binding with the lowest priority.
-findMin :: PSQ -> Maybe Elem
+findMin :: PSQ a -> Maybe (Elem a)
 findMin Void           = Nothing
 findMin (Winner e _ _) = Just e
 
 -- | /O(log n)/ Remove the binding with the lowest priority.
-deleteMin :: PSQ -> PSQ
+deleteMin :: PSQ a -> PSQ a
 deleteMin Void           = Void
 deleteMin (Winner _ t m) = secondBest t m
 
 -- | /O(log n)/ Retrieve the binding with the least priority, and the
 -- rest of the queue stripped of that binding.
-minView :: PSQ -> Maybe (Elem, PSQ)
+minView :: PSQ a -> Maybe (Elem a, PSQ a)
 minView Void           = Nothing
 minView (Winner e t m) = Just (e, secondBest t m)
 
-secondBest :: LTree -> Key -> PSQ
+secondBest :: LTree a -> Key -> PSQ a
 secondBest Start _                   = Void
 secondBest (LLoser _ e tl m tr) m' = Winner e tl m `play` secondBest tr m'
 secondBest (RLoser _ e tl m tr) m' = secondBest tl m `play` Winner e tr m'
@@ -244,24 +244,24 @@ secondBest (RLoser _ e tl m tr) m' = secondBest tl m `play` Winner e tr m'
 
 type Size = Int
 
-data LTree = Start
-           | LLoser {-# UNPACK #-} !Size
-                    {-# UNPACK #-} !Elem
-                    !LTree
-                    {-# UNPACK #-} !Key  -- split key
-                    !LTree
-           | RLoser {-# UNPACK #-} !Size
-                    {-# UNPACK #-} !Elem
-                    !LTree
-                    {-# UNPACK #-} !Key  -- split key
-                    !LTree
+data LTree a = Start
+             | LLoser {-# UNPACK #-} !Size
+                      {-# UNPACK #-} !(Elem a)
+                      !(LTree a)
+                      {-# UNPACK #-} !Key  -- split key
+                      !(LTree a)
+             | RLoser {-# UNPACK #-} !Size
+                      {-# UNPACK #-} !(Elem a)
+                      !(LTree a)
+                      {-# UNPACK #-} !Key  -- split key
+                      !(LTree a)
 
-size' :: LTree -> Size
+size' :: LTree a -> Size
 size' Start              = 0
 size' (LLoser s _ _ _ _) = s
 size' (RLoser s _ _ _ _) = s
 
-left, right :: LTree -> LTree
+left, right :: LTree a -> LTree a
 
 left Start                = moduleError "left" "empty loser tree"
 left (LLoser _ _ tl _ _ ) = tl
@@ -271,13 +271,13 @@ right Start                = moduleError "right" "empty loser tree"
 right (LLoser _ _ _  _ tr) = tr
 right (RLoser _ _ _  _ tr) = tr
 
-maxKey :: PSQ -> Key
+maxKey :: PSQ a -> Key
 maxKey Void           = moduleError "maxKey" "empty queue"
 maxKey (Winner _ _ m) = m
 
-lloser, rloser :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-lloser k p tl m tr = LLoser (1 + size' tl + size' tr) (E k p) tl m tr
-rloser k p tl m tr = RLoser (1 + size' tl + size' tr) (E k p) tl m tr
+lloser, rloser :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+lloser k p v tl m tr = LLoser (1 + size' tl + size' tr) (E k p v) tl m tr
+rloser k p v tl m tr = RLoser (1 + size' tl + size' tr) (E k p v) tl m tr
 
 ------------------------------------------------------------------------
 -- Balancing
@@ -286,110 +286,110 @@ rloser k p tl m tr = RLoser (1 + size' tl + size' tr) (E k p) tl m tr
 omega :: Int
 omega = 4
 
-lbalance, rbalance :: Key -> Prio -> LTree -> Key -> LTree -> LTree
+lbalance, rbalance :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
 
-lbalance k p l m r
-    | size' l + size' r < 2     = lloser        k p l m r
-    | size' r > omega * size' l = lbalanceLeft  k p l m r
-    | size' l > omega * size' r = lbalanceRight k p l m r
-    | otherwise                 = lloser        k p l m r
+lbalance k p v l m r
+    | size' l + size' r < 2     = lloser        k p v l m r
+    | size' r > omega * size' l = lbalanceLeft  k p v l m r
+    | size' l > omega * size' r = lbalanceRight k p v l m r
+    | otherwise                 = lloser        k p v l m r
 
-rbalance k p l m r
-    | size' l + size' r < 2     = rloser        k p l m r
-    | size' r > omega * size' l = rbalanceLeft  k p l m r
-    | size' l > omega * size' r = rbalanceRight k p l m r
-    | otherwise                 = rloser        k p l m r
+rbalance k p v l m r
+    | size' l + size' r < 2     = rloser        k p v l m r
+    | size' r > omega * size' l = rbalanceLeft  k p v l m r
+    | size' l > omega * size' r = rbalanceRight k p v l m r
+    | otherwise                 = rloser        k p v l m r
 
-lbalanceLeft :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-lbalanceLeft  k p l m r
-    | size' (left r) < size' (right r) = lsingleLeft  k p l m r
-    | otherwise                        = ldoubleLeft  k p l m r
+lbalanceLeft :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+lbalanceLeft  k p v l m r
+    | size' (left r) < size' (right r) = lsingleLeft  k p v l m r
+    | otherwise                        = ldoubleLeft  k p v l m r
 
-lbalanceRight :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-lbalanceRight k p l m r
-    | size' (left l) > size' (right l) = lsingleRight k p l m r
-    | otherwise                        = ldoubleRight k p l m r
+lbalanceRight :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+lbalanceRight k p v l m r
+    | size' (left l) > size' (right l) = lsingleRight k p v l m r
+    | otherwise                        = ldoubleRight k p v l m r
 
-rbalanceLeft :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-rbalanceLeft  k p l m r
-    | size' (left r) < size' (right r) = rsingleLeft  k p l m r
-    | otherwise                        = rdoubleLeft  k p l m r
+rbalanceLeft :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+rbalanceLeft  k p v l m r
+    | size' (left r) < size' (right r) = rsingleLeft  k p v l m r
+    | otherwise                        = rdoubleLeft  k p v l m r
 
-rbalanceRight :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-rbalanceRight k p l m r
-    | size' (left l) > size' (right l) = rsingleRight k p l m r
-    | otherwise                        = rdoubleRight k p l m r
+rbalanceRight :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+rbalanceRight k p v l m r
+    | size' (left l) > size' (right l) = rsingleRight k p v l m r
+    | otherwise                        = rdoubleRight k p v l m r
 
-lsingleLeft :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-lsingleLeft k1 p1 t1 m1 (LLoser _ (E k2 p2) t2 m2 t3)
-    | p1 <= p2  = lloser k1 p1 (rloser k2 p2 t1 m1 t2) m2 t3
-    | otherwise = lloser k2 p2 (lloser k1 p1 t1 m1 t2) m2 t3
-lsingleLeft k1 p1 t1 m1 (RLoser _ (E k2 p2) t2 m2 t3) =
-    rloser k2 p2 (lloser k1 p1 t1 m1 t2) m2 t3
+lsingleLeft :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+lsingleLeft k1 p1 v1 t1 m1 (LLoser _ (E k2 p2 v2) t2 m2 t3)
+    | p1 <= p2  = lloser k1 p1 v1 (rloser k2 p2 v2 t1 m1 t2) m2 t3
+    | otherwise = lloser k2 p2 v2 (lloser k1 p1 v1 t1 m1 t2) m2 t3
+lsingleLeft k1 p1 v1 t1 m1 (RLoser _ (E k2 p2 v2) t2 m2 t3) =
+    rloser k2 p2 v2 (lloser k1 p1 v1 t1 m1 t2) m2 t3
 
-rsingleLeft :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-rsingleLeft k1 p1 t1 m1 (LLoser _ (E k2 p2) t2 m2 t3) =
-    rloser k1 p1 (rloser k2 p2 t1 m1 t2) m2 t3
-rsingleLeft k1 p1 t1 m1 (RLoser _ (E k2 p2) t2 m2 t3) =
-    rloser k2 p2 (rloser k1 p1 t1 m1 t2) m2 t3
+rsingleLeft :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+rsingleLeft k1 p1 v1 t1 m1 (LLoser _ (E k2 p2 v2) t2 m2 t3) =
+    rloser k1 p1 v1 (rloser k2 p2 v2 t1 m1 t2) m2 t3
+rsingleLeft k1 p1 v1 t1 m1 (RLoser _ (E k2 p2 v2) t2 m2 t3) =
+    rloser k2 p2 v2 (rloser k1 p1 v1 t1 m1 t2) m2 t3
 
-lsingleRight :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-lsingleRight k1 p1 (LLoser _ (E k2 p2) t1 m1 t2) m2 t3 =
-    lloser k2 p2 t1 m1 (lloser k1 p1 t2 m2 t3)
-lsingleRight k1 p1 (RLoser _ (E k2 p2) t1 m1 t2) m2 t3 =
-    lloser k1 p1 t1 m1 (lloser k2 p2 t2 m2 t3)
+lsingleRight :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+lsingleRight k1 p1 v1 (LLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3 =
+    lloser k2 p2 v2 t1 m1 (lloser k1 p1 v1 t2 m2 t3)
+lsingleRight k1 p1 v1 (RLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3 =
+    lloser k1 p1 v1 t1 m1 (lloser k2 p2 v2 t2 m2 t3)
 
-rsingleRight :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-rsingleRight k1 p1 (LLoser _ (E k2 p2) t1 m1 t2) m2 t3 =
-    lloser k2 p2 t1 m1 (rloser k1 p1 t2 m2 t3)
-rsingleRight k1 p1 (RLoser _ (E k2 p2) t1 m1 t2) m2 t3
-    | p1 <= p2  = rloser k1 p1 t1 m1 (lloser k2 p2 t2 m2 t3)
-    | otherwise = rloser k2 p2 t1 m1 (rloser k1 p1 t2 m2 t3)
+rsingleRight :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+rsingleRight k1 p1 v1 (LLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3 =
+    lloser k2 p2 v2 t1 m1 (rloser k1 p1 v1 t2 m2 t3)
+rsingleRight k1 p1 v1 (RLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3
+    | p1 <= p2  = rloser k1 p1 v1 t1 m1 (lloser k2 p2 v2 t2 m2 t3)
+    | otherwise = rloser k2 p2 v2 t1 m1 (rloser k1 p1 v1 t2 m2 t3)
 
-ldoubleLeft :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-ldoubleLeft k1 p1 t1 m1 (LLoser _ (E k2 p2) t2 m2 t3) =
-    lsingleLeft k1 p1 t1 m1 (lsingleRight k2 p2 t2 m2 t3)
-ldoubleLeft k1 p1 t1 m1 (RLoser _ (E k2 p2) t2 m2 t3) =
-    lsingleLeft k1 p1 t1 m1 (rsingleRight k2 p2 t2 m2 t3)
+ldoubleLeft :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+ldoubleLeft k1 p1 v1 t1 m1 (LLoser _ (E k2 p2 v2) t2 m2 t3) =
+    lsingleLeft k1 p1 v1 t1 m1 (lsingleRight k2 p2 v2 t2 m2 t3)
+ldoubleLeft k1 p1 v1 t1 m1 (RLoser _ (E k2 p2 v2) t2 m2 t3) =
+    lsingleLeft k1 p1 v1 t1 m1 (rsingleRight k2 p2 v2 t2 m2 t3)
 
-ldoubleRight :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-ldoubleRight k1 p1 (LLoser _ (E k2 p2) t1 m1 t2) m2 t3 =
-    lsingleRight k1 p1 (lsingleLeft k2 p2 t1 m1 t2) m2 t3
-ldoubleRight k1 p1 (RLoser _ (E k2 p2) t1 m1 t2) m2 t3 =
-    lsingleRight k1 p1 (rsingleLeft k2 p2 t1 m1 t2) m2 t3
+ldoubleRight :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+ldoubleRight k1 p1 v1 (LLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3 =
+    lsingleRight k1 p1 v1 (lsingleLeft k2 p2 v2 t1 m1 t2) m2 t3
+ldoubleRight k1 p1 v1 (RLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3 =
+    lsingleRight k1 p1 v1 (rsingleLeft k2 p2 v2 t1 m1 t2) m2 t3
 
-rdoubleLeft :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-rdoubleLeft k1 p1 t1 m1 (LLoser _ (E k2 p2) t2 m2 t3) =
-    rsingleLeft k1 p1 t1 m1 (lsingleRight k2 p2 t2 m2 t3)
-rdoubleLeft k1 p1 t1 m1 (RLoser _ (E k2 p2) t2 m2 t3) =
-    rsingleLeft k1 p1 t1 m1 (rsingleRight k2 p2 t2 m2 t3)
+rdoubleLeft :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+rdoubleLeft k1 p1 v1 t1 m1 (LLoser _ (E k2 p2 v2) t2 m2 t3) =
+    rsingleLeft k1 p1 v1 t1 m1 (lsingleRight k2 p2 v2 t2 m2 t3)
+rdoubleLeft k1 p1 v1 t1 m1 (RLoser _ (E k2 p2 v2) t2 m2 t3) =
+    rsingleLeft k1 p1 v1 t1 m1 (rsingleRight k2 p2 v2 t2 m2 t3)
 
-rdoubleRight :: Key -> Prio -> LTree -> Key -> LTree -> LTree
-rdoubleRight k1 p1 (LLoser _ (E k2 p2) t1 m1 t2) m2 t3 =
-    rsingleRight k1 p1 (lsingleLeft k2 p2 t1 m1 t2) m2 t3
-rdoubleRight k1 p1 (RLoser _ (E k2 p2) t1 m1 t2) m2 t3 =
-    rsingleRight k1 p1 (rsingleLeft k2 p2 t1 m1 t2) m2 t3
+rdoubleRight :: Key -> Prio -> a -> LTree a -> Key -> LTree a -> LTree a
+rdoubleRight k1 p1 v1 (LLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3 =
+    rsingleRight k1 p1 v1 (lsingleLeft k2 p2 v2 t1 m1 t2) m2 t3
+rdoubleRight k1 p1 v1 (RLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3 =
+    rsingleRight k1 p1 v1 (rsingleLeft k2 p2 v2 t1 m1 t2) m2 t3
 
-play :: PSQ -> PSQ -> PSQ
+play :: PSQ a -> PSQ a -> PSQ a
 Void `play` t' = t'
 t `play` Void  = t
-Winner e@(E k p) t m `play` Winner e'@(E k' p') t' m'
-    | p <= p'   = Winner e (rbalance k' p' t m t') m'
-    | otherwise = Winner e' (lbalance k p t m t') m'
+Winner e@(E k p v) t m `play` Winner e'@(E k' p' v') t' m'
+    | p <= p'   = Winner e (rbalance k' p' v' t m t') m'
+    | otherwise = Winner e' (lbalance k p v t m t') m'
 
-unsafePlay :: PSQ -> PSQ -> PSQ
+unsafePlay :: PSQ a -> PSQ a -> PSQ a
 Void `unsafePlay` t' =  t'
 t `unsafePlay` Void  =  t
-Winner e@(E k p) t m `unsafePlay` Winner e'@(E k' p') t' m'
-    | p <= p'   = Winner e (rbalance k' p' t m t') m'
-    | otherwise = Winner e' (lbalance k p t m t') m'
+Winner e@(E k p v) t m `unsafePlay` Winner e'@(E k' p' v') t' m'
+    | p <= p'   = Winner e (rbalance k' p' v' t m t') m'
+    | otherwise = Winner e' (lbalance k p v t m t') m'
 
-data TourView = Null
-              | Single {-# UNPACK #-} !Elem
-              | PSQ `Play` PSQ
+data TourView a = Null
+                | Single {-# UNPACK #-} !(Elem a)
+                | (PSQ a) `Play` (PSQ a)
 
-tourView :: PSQ -> TourView
-tourView Void                 = Null
+tourView :: PSQ a -> TourView a
+tourView Void               = Null
 tourView (Winner e Start _) = Single e
 tourView (Winner e (RLoser _ e' tl m tr) m') =
     Winner e tl m `Play` Winner e' tr m'

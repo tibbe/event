@@ -18,19 +18,19 @@ main = defaultMain
 
 -- | Create a priority queue with keys and priorities in ascending
 -- order starting at 0 and ending at @max@ (exclusive.)
-ascFrom :: Int -> PSQ
+ascFrom :: Int -> PSQ Int
 ascFrom max = go 0 Q.empty
   where
-    go :: Int -> PSQ -> PSQ
+    go :: Int -> PSQ Int -> PSQ Int
     go n !q
         | n >= max  = q
-        | otherwise = go (n + 1) $ Q.insert n n q
+        | otherwise = go (n + 1) $ Q.insert n n n q
 
 -- | Delete all keys that are multiples of @step@ but less than @max@.
-deleteEveryN :: Int -> Int -> PSQ -> PSQ
+deleteEveryN :: Int -> Int -> PSQ a -> PSQ a
 deleteEveryN step max q0 = go 0 q0
   where
-    go :: Int -> PSQ -> PSQ
+    go :: Int -> PSQ a -> PSQ a
     go n !q
         | n >= max  = q
         | otherwise = go (n + step) $ Q.delete n q
