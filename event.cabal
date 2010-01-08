@@ -26,6 +26,7 @@ library
 
   other-modules:
     System.Event.Array
+    System.Event.Control
     System.Event.Internal
     System.Event.Vector
     System.Event.TimeoutTable
@@ -91,13 +92,6 @@ Executable test
       other-modules:
         System.Event.EPoll
       cpp-options: -DBACKEND_EPOLL
-
-  extensions:
-    CPP,
-    ExistentialQuantification,
-    ForeignFunctionInterface,
-    MagicHash,
-    UnboxedTuples
 
   ghc-options: -Wall -funbox-strict-fields -fhpc
   if impl(ghc >= 6.8)

@@ -8,7 +8,7 @@
 module Main where
 
 import Args (ljust, parseArgs, positive, theLast)
-import Control.Concurrent (MVar, forkIO, takeMVar, newEmptyMVar, putMVar)
+import Control.Concurrent (MVar, takeMVar, newEmptyMVar, putMVar)
 import Control.Monad (forM_, replicateM, when)
 import Data.Array.Unboxed (UArray, listArray)
 import Data.Function (on)
@@ -21,7 +21,7 @@ import Foreign.Ptr (Ptr)
 import Foreign.C.Types (CChar)
 import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
-import System.Event (Event(..), evtRead, evtWrite, loop, new, registerFd)
+import System.Event (Event(..), evtRead, evtWrite, new, registerFd)
 import System.Posix.IO (createPipe)
 import System.Posix.Resource (ResourceLimit(..), ResourceLimits(..),
                               Resource(..), setResourceLimit)
@@ -56,7 +56,6 @@ defaultOptions = [
 readCallback :: MVar () -> IORef Int -> Fd -> Event -> IO ()
 readCallback done ref fd _ = do
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
-  print ("read",fd,a)
   if a > 10
     then do
       close fd
@@ -67,7 +66,6 @@ readCallback done ref fd _ = do
 writeCallback :: IORef Int -> Fd -> Event -> IO ()
 writeCallback ref fd _ = do
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
-  print ("write",fd,a)
   if a > 10
     then close fd
     else do
@@ -82,11 +80,9 @@ main = do
         ResourceLimits { softLimit = lim, hardLimit = lim }
 
     pipePairs <- replicateM numPipes createPipe
-    print pipePairs
     let pipes = concatMap (\(r,w) -> [r,w]) pipePairs
 
     mgr <- new
-    forkIO $ loop mgr
     rref <- newIORef 0
     wref <- newIORef 0
     done <- newEmptyMVar
