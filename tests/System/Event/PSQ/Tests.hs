@@ -2,7 +2,7 @@
 
 module System.Event.PSQ.Tests (tests) where
 
-import System.Event.PSQ (Binding(..), PSQ)
+import System.Event.PSQ (Elem(..), PSQ)
 import qualified System.Event.PSQ as Q
 
 import Data.Function (on)
@@ -15,7 +15,7 @@ instance Arbitrary PSQ where
     arbitrary = do
         ks <- arbitrary
         ps <- arbitrary
-        return . Q.fromList $ zipWith (:->) ks ps
+        return . Q.fromList $ zipWith E ks ps
 
 tests :: Test
 tests = testGroup "System.Event.PSQ"  testlist
@@ -29,10 +29,10 @@ testlist =
 
 propMin xs =
     case (findMin $ fromList xs, Q.findMin q) of
-        (Nothing, Nothing)        -> True
-        (Just p, Just (k :-> p')) -> p == p'
-        _                         -> False
-  where q = Q.fromList . map (\(k, p) -> k :-> p) $ xs
+        (Nothing, Nothing)      -> True
+        (Just p, Just (E k p')) -> p == p'
+        _                       -> False
+  where q = Q.fromList . map (\(k, p) -> E k p) $ xs
 
 propInsert k p q =
     case Q.lookup k (Q.insert k p q) of
