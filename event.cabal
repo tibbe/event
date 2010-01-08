@@ -10,9 +10,11 @@ author:        Bryan O'Sullivan <bos@serpentine.com>
 maintainer:    Johan Tibell <johan.tibell@gmail.com>
 category:      System
 
-build-type:    Custom
+build-type:    Configure
 cabal-version: >= 1.6
-extra-source-files:  README.md
+extra-source-files:
+  README.md config.guess config.sub install-sh configure.ac configure
+  include/EventConfig.h
 
 flag test
   description: Build test program.
@@ -58,8 +60,8 @@ library
   if impl(ghc >= 6.8)
     ghc-options: -fwarn-tabs
 
-  hs-source-dirs:
-    src
+  hs-source-dirs: src
+  include-dirs: include
 
 
 Executable test
