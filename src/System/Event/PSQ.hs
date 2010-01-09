@@ -181,14 +181,17 @@ delete k q = case tourView q of
 -- of the provided function.  When the key is not a member of the
 -- queue, the original queue is returned.
 adjust :: (Prio -> Prio) -> Key -> PSQ a -> PSQ a
-adjust f k q = case tourView q of
-    Null -> empty
-    Single (E k' p v)
+adjust f k q = case q of
+    Void -> empty
+    Winner (E k' p v) Start _
         | k == k'   -> singleton k' (f p) v
         | otherwise -> singleton k' p v
-    tl `Play` tr
-        | k <= maxKey tl -> adjust f k tl `unsafePlay` tr
-        | otherwise      -> tl `unsafePlay` adjust f k tr
+    Winner e (RLoser _ e' tl m tr) m'
+        | k <= m    -> adjust f k (Winner e tl m) `play` (Winner e' tr m')
+        | otherwise -> (Winner e tl m) `play` adjust f k (Winner e' tr m')
+    Winner e (LLoser _ e' tl m tr) m'
+        | k <= m    -> adjust f k (Winner e' tl m) `play` (Winner e tr m')
+        | otherwise -> (Winner e' tl m) `play` adjust f k (Winner e tr m')
 
 ------------------------------------------------------------------------
 -- Conversion

@@ -23,10 +23,16 @@ tests = testGroup "System.Event.PSQ"  testlist
 
 testlist :: [Test]
 testlist =
-    [ testProperty "delete" propDelete
+    [ testProperty "adjust" propAdjust
+    , testProperty "delete" propDelete
     , testProperty "insert" propInsert
     , testProperty "min" propMin
     ]
+
+propAdjust k p (v :: Int) q =
+    case Q.lookup k (Q.adjust (+ 1) k (Q.insert k p v q)) of
+        Just (p', v') -> p + 1 == p'
+        _             -> False
 
 propMin (xs :: [(Q.Key, Q.Prio, Int)]) =
     case (findMin $ fromList xs, Q.findMin q) of

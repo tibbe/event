@@ -8,6 +8,7 @@ import qualified System.Event.PSQ as Q
 main = defaultMain
     [ bench "insert10k/min" $ whnf (Q.findMin . ascFrom) n
     , bench "delete1k/min" $ whnf (Q.findMin . deleteEveryN (n `div` 1000) n) q
+    , bench "adjust1k/min" $ whnf (Q.findMin . adjustEveryN (n `div` 1000) n) q
     ]
   where
     -- Number of elements
@@ -35,3 +36,13 @@ deleteEveryN step max q0 = go 0 q0
     go n !q
         | n >= max  = q
         | otherwise = go (n + step) $ Q.delete n q
+
+-- | Adjust the priority of all keys that are multiples of @step@ but
+-- less than @max@.
+adjustEveryN :: Int -> Int -> PSQ a -> PSQ a
+adjustEveryN step max q0 = go 0 q0
+  where
+    go :: Int -> PSQ a -> PSQ a
+    go n !q
+        | n >= max  = q
+        | otherwise = go (n + step) $ Q.adjust (+ 1) n q
