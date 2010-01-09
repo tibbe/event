@@ -28,7 +28,6 @@ library
     System.Event.Array
     System.Event.Control
     System.Event.Internal
-    System.Event.Vector
     System.Event.TimeoutTable
     System.Event.TimeoutTable.Internal
 
