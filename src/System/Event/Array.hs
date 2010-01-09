@@ -12,6 +12,7 @@ module System.Event.Array
       ensureCapacity,
       useAsPtr,
       snoc,
+      clear,
       forM_
     ) where
 
@@ -92,17 +93,20 @@ ensureCapacity (Array ref) c = do
 
 useAsPtr :: Array a -> (Ptr a -> Int -> IO b) -> IO b
 useAsPtr (Array ref) f = do
-    AC es _ cap <- readIORef ref
-    f es cap
+    AC es len _ <- readIORef ref
+    f es len
 
 snoc :: Storable a => Array a -> a -> IO ()
 snoc arr@(Array ref) e = do
     len <- length arr
-    let len' = succ len
+    let len' = len + 1
     ensureCapacity arr len'
     unsafeWrite arr len e
     AC es _ cap <- readIORef ref
     writeIORef ref (AC es len' cap)
+
+clear :: Storable a => Array a -> IO ()
+clear (Array ref) = atomicModifyIORef ref $ \(AC es _ cap) -> (AC es 0 cap,())
 
 forM_ :: Storable a => Array a -> (a -> IO ()) -> IO ()
 forM_ ary g = forHack ary g undefined

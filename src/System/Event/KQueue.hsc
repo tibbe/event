@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE ForeignFunctionInterface, RecordWildCards #-}
 
 module System.Event.KQueue where
 
@@ -24,7 +24,7 @@ import qualified System.Event.Array as A
 ------------------------------------------------------------------------
 -- FFI binding
 
-newtype EventQ = EventQ { unEventQ :: CInt }
+newtype QueueFd = QueueFd CInt
     deriving (Eq, Show)
 
 data Event = Event {
@@ -111,19 +111,18 @@ instance Storable TimeSpec where
         #{poke struct timespec, tv_nsec} ptr (tv_nsec ts)
 
 foreign import ccall unsafe "event.h kqueue"
-    c_kqueue :: IO EventQ
+    c_kqueue :: IO CInt
 
 foreign import ccall safe "event.h kevent"
-    c_kevent :: EventQ -> Ptr Event -> CInt -> Ptr Event -> CInt
+    c_kevent :: QueueFd -> Ptr Event -> CInt -> Ptr Event -> CInt
              -> Ptr TimeSpec -> IO CInt
 
-kqueue :: IO EventQ
-kqueue = EventQ `fmap` throwErrnoIfMinus1
-         "kqueue" (fmap unEventQ c_kqueue)
+kqueue :: IO QueueFd
+kqueue = QueueFd `fmap` throwErrnoIfMinus1 "kqueue" c_kqueue
 
 -- TODO: We cannot retry on EINTR as the timeout would be wrong.
 -- Perhaps we should just return without calling any callbacks.
-kevent :: EventQ -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
+kevent :: QueueFd -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
        -> IO Int
 kevent k chs chlen evs evlen ts
     = fmap fromIntegral $ throwErrnoIfMinus1 "kevent" $
@@ -150,9 +149,9 @@ msToTimeSpec (Timeout ms) = TimeSpec (toEnum sec) (toEnum nanosec)
 -- Exported interface
 
 data EventQueue = EventQueue {
-      kq       :: {-# UNPACK #-} !EventQ
-    , changes  :: {-# UNPACK #-} !(A.Array Event)
-    , events   :: {-# UNPACK #-} !(A.Array Event)
+      eqFd       :: {-# UNPACK #-} !QueueFd
+    , eqChanges  :: {-# UNPACK #-} !(A.Array Event)
+    , eqEvents   :: {-# UNPACK #-} !(A.Array Event)
     }
 
 instance E.Backend EventQueue where
@@ -161,36 +160,40 @@ instance E.Backend EventQueue where
     set q fd evs = set q fd (fromEvent evs) flagAdd
 
 new :: IO EventQueue
-new = do
-    eq <- liftM3 EventQueue kqueue A.empty (A.new 64)
-    return eq
+new = liftM3 EventQueue kqueue A.empty (A.new 64)
 
 set :: EventQueue -> Fd -> Filter -> Flag -> IO ()
 set q fd fltr flg =
-    A.snoc (changes q) (Event (fromIntegral fd) fltr flg 0 0 nullPtr)
+    A.snoc (eqChanges q) (Event (fromIntegral fd) fltr flg 0 0 nullPtr)
 
 poll :: EventQueue
      -> Timeout
      -> (Fd -> E.Event -> IO ())
      -> IO E.Result
-poll q tout f = do
-    changesLen <- A.length (changes q)
-    len <- A.length (events q)
-    when (changesLen > len) $ A.ensureCapacity (events q) (2 * changesLen)
-    res <- A.useAsPtr (changes q) $ \changesPtr chLen ->
-               A.useAsPtr (events q) $ \eventsPtr evLen ->
-               withTimeSpec (msToTimeSpec tout) $ \tsPtr ->
-               kevent (kq q) changesPtr chLen eventsPtr evLen tsPtr
+poll EventQueue{..} tout f = do
+    changesLen <- A.length eqChanges
+    len <- A.length eqEvents
+    when (changesLen > len) $ A.ensureCapacity eqEvents (2 * changesLen)
+    n <- A.useAsPtr eqChanges $ \changesPtr chLen -> do
+           print ("before kevent",chLen)
+           A.unsafeLoad eqEvents $ \evPtr evCap ->
+             withTimeSpec (msToTimeSpec tout) $
+               kevent eqFd changesPtr chLen evPtr evCap
+    A.clear eqChanges
+    print ("after kevent", n)
 
-    if res == 0 then
+    if n == 0 then
         return E.TimedOut
       else do
-        eventsLen <- A.length (events q)
-        when (res == eventsLen) $ do
-            A.ensureCapacity (events q) (2 * eventsLen)
+        cap <- A.capacity eqEvents
+        when (n == cap) $
+          A.ensureCapacity eqEvents (2 * cap)
 
-        A.forM_ (events q) $ \e -> do
-            f (fromIntegral . ident $ e) (toEvent . filter $ e)
+        A.forM_ eqEvents $ \e -> do
+            let ev = toEvent . filter $ e
+                fd = (fromIntegral . ident $ e)
+            print (fd,ev)
+            f fd ev
 
         return E.Activity
 
