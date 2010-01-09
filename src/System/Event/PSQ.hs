@@ -32,12 +32,12 @@
 -- OF THE POSSIBILITY OF SUCH DAMAGE.
 
 -- A /priority search queue/ (henceforth /queue/) efficiently supports
--- the opperations of both a search tree and a priority queue.  An
--- 'Elem'ent is a product of a key and a priority. Elements can be
--- inserted, deleted, modified and queried in logarithmic time, and
--- the binding with the least priority can be retrieved in constant
--- time.  A queue can be built from a list of elements, sorted by
--- keys, in linear time.
+-- the operations of both a search tree and a priority queue.  An
+-- 'Elem'ent is a product of a key, a priority, and a value. Elements
+-- can be inserted, deleted, modified and queried in logarithmic time,
+-- and the element with the least priority can be retrieved in
+-- constant time.  A queue can be built from a list of elements,
+-- sorted by keys, in linear time.
 --
 -- This implementation is due to Ralf Hinze with some modifications by
 -- Scott Dillard and Johan Tibell.
@@ -107,9 +107,9 @@ data PSQ a = Void
                     {-# UNPACK #-} !Key  -- max key
 
 instance Show a => Show (PSQ a) where
-    show = show . map show . toAscList
+    show = show . toAscList
 
--- | /O(1)/ The number of bindings in a queue.
+-- | /O(1)/ The number of elements in a queue.
 size :: PSQ a -> Int
 size Void            = 0
 size (Winner _ lt _) = 1 + size' lt
@@ -119,8 +119,8 @@ null :: PSQ a -> Bool
 null Void           = True
 null (Winner _ _ _) = False
 
--- | /O(log n)/ The priority of a given key, or Nothing if the key is
--- not bound.
+-- | /O(log n)/ The priority and value of a given key, or Nothing if
+-- the key is not bound.
 lookup :: Key -> PSQ a -> Maybe (Prio, a)
 lookup k q = case tourView q of
     Null -> Nothing
@@ -137,14 +137,16 @@ lookup k q = case tourView q of
 empty :: PSQ a
 empty = Void
 
--- | O(1) Build a queue with one binding.
+-- | /O(1)/ Build a queue with one element.
 singleton :: Key -> Prio -> a -> PSQ a
 singleton k p v = Winner (E k p v) Start k
 
 ------------------------------------------------------------------------
 -- Insertion
 
--- | /O(log n)/ Insert a binding into the queue.
+-- | /O(log n)/ Insert a new key, priority and value in the queue.  If
+-- the key is already present in the queue, the associated priority
+-- and value are replaced with the supplied priority and value.
 insert :: Key -> Prio -> a -> PSQ a -> PSQ a
 insert k p v q = case q of
     Void -> singleton k p v
@@ -162,7 +164,9 @@ insert k p v q = case q of
 ------------------------------------------------------------------------
 -- Delete/Update
 
--- | /O(log n)/ Remove a binding from the queue.
+-- | /O(log n)/ Delete a key and its priority and value from the
+-- queue.  When the key is not a member of the queue, the original
+-- queue is returned.
 delete :: Key -> PSQ a -> PSQ a
 delete k q = case tourView q of
     Null -> empty
@@ -173,7 +177,9 @@ delete k q = case tourView q of
         | k <= maxKey tl -> delete k tl `play` tr
         | otherwise      -> tl `play` delete k tr
 
--- | /O(log n)/ Adjust the priority of a key.
+-- | /O(log n)/ Update a priority at a specific key with the result
+-- of the provided function.  When the key is not a member of the
+-- queue, the original queue is returned.
 adjust :: (Prio -> Prio) -> Key -> PSQ a -> PSQ a
 adjust f k q = case tourView q of
     Null -> empty
@@ -187,15 +193,17 @@ adjust f k q = case tourView q of
 ------------------------------------------------------------------------
 -- Conversion
 
--- | /O(n log n)/ Build a queue from a list of bindings.
+-- | /O(n*log n)/ Build a queue from a list of key/priority/value
+-- tuples.  If the list contains more than one priority and value for
+-- the same key, the last priority and value for the key is retained.
 fromList :: [Elem a] -> PSQ a
 fromList = P.foldr (\(E k p v) q -> insert k p v q) empty
 
--- | /O(n)/ Convert a queue to a list.
+-- | /O(n)/ Convert to a list of key/priority/value tuples.
 toList :: PSQ a -> [Elem a]
 toList = toAscList
 
--- | /O(n)/ Convert a queue to a list in ascending order of keys.
+-- | /O(n)/ Convert to an ascending list.
 toAscList :: PSQ a -> [Elem a]
 toAscList q  = seqToList (toAscLists q)
 
@@ -205,7 +213,7 @@ toAscLists q = case tourView q of
     Single e     -> singleSequ e
     tl `Play` tr -> toAscLists tl <> toAscLists tr
 
--- | /O(n)/ Convert a queue to a list in descending order of keys.
+-- | /O(n)/ Convert to a descending list.
 toDescList :: PSQ a -> [ Elem a ]
 toDescList q = seqToList (toDescLists q)
 
@@ -218,12 +226,13 @@ toDescLists q = case tourView q of
 ------------------------------------------------------------------------
 -- Min
 
--- | /O(1)/ The binding with the lowest priority.
+-- | /O(1)/ The element with the lowest priority.
 findMin :: PSQ a -> Maybe (Elem a)
 findMin Void           = Nothing
 findMin (Winner e _ _) = Just e
 
--- | /O(log n)/ Remove the binding with the lowest priority.
+-- | /O(log n)/ Delete the element with the lowest priority.  Returns
+-- an empty queue if the queue is empty.
 deleteMin :: PSQ a -> PSQ a
 deleteMin Void           = Void
 deleteMin (Winner _ t m) = secondBest t m
@@ -235,7 +244,7 @@ minView Void           = Nothing
 minView (Winner e t m) = Just (e, secondBest t m)
 
 secondBest :: LTree a -> Key -> PSQ a
-secondBest Start _                   = Void
+secondBest Start _                 = Void
 secondBest (LLoser _ e tl m tr) m' = Winner e tl m `play` secondBest tr m'
 secondBest (RLoser _ e tl m tr) m' = secondBest tl m `play` Winner e tr m'
 
