@@ -385,6 +385,7 @@ t `play` Void  = t
 Winner e@(E k p v) t m `play` Winner e'@(E k' p' v') t' m'
     | p <= p'   = Winner e (rbalance k' p' v' t m t') m'
     | otherwise = Winner e' (lbalance k p v t m t') m'
+{-# INLINE play #-}
 
 unsafePlay :: PSQ a -> PSQ a -> PSQ a
 Void `unsafePlay` t' =  t'
