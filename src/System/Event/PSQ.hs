@@ -187,11 +187,11 @@ adjust f k q = case q of
         | k == k'   -> singleton k' (f p) v
         | otherwise -> singleton k' p v
     Winner e (RLoser _ e' tl m tr) m'
-        | k <= m    -> adjust f k (Winner e tl m) `play` (Winner e' tr m')
-        | otherwise -> (Winner e tl m) `play` adjust f k (Winner e' tr m')
+        | k <= m    -> adjust f k (Winner e tl m) `unsafePlay` (Winner e' tr m')
+        | otherwise -> (Winner e tl m) `unsafePlay` adjust f k (Winner e' tr m')
     Winner e (LLoser _ e' tl m tr) m'
-        | k <= m    -> adjust f k (Winner e' tl m) `play` (Winner e tr m')
-        | otherwise -> (Winner e' tl m) `play` adjust f k (Winner e tr m')
+        | k <= m    -> adjust f k (Winner e' tl m) `unsafePlay` (Winner e tr m')
+        | otherwise -> (Winner e' tl m) `unsafePlay` adjust f k (Winner e tr m')
 
 ------------------------------------------------------------------------
 -- Conversion
@@ -382,6 +382,9 @@ rdoubleRight k1 p1 v1 (LLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3 =
 rdoubleRight k1 p1 v1 (RLoser _ (E k2 p2 v2) t1 m1 t2) m2 t3 =
     rsingleRight k1 p1 v1 (rsingleLeft k2 p2 v2 t1 m1 t2) m2 t3
 
+-- | Take two pennants and returns a new pennant that is the union of
+-- the two with the precondition that the keys in the ﬁrst tree are
+-- strictly smaller than the keys in the second tree.
 play :: PSQ a -> PSQ a -> PSQ a
 Void `play` t' = t'
 t `play` Void  = t
@@ -390,12 +393,15 @@ Winner e@(E k p v) t m `play` Winner e'@(E k' p' v') t' m'
     | otherwise = Winner e' (lbalance k p v t m t') m'
 {-# INLINE play #-}
 
+-- | A version of 'play' that can be used if the shape of the tree has
+-- not changed or if the tree is known to be balanced.
 unsafePlay :: PSQ a -> PSQ a -> PSQ a
 Void `unsafePlay` t' =  t'
 t `unsafePlay` Void  =  t
 Winner e@(E k p v) t m `unsafePlay` Winner e'@(E k' p' v') t' m'
-    | p <= p'   = Winner e (rbalance k' p' v' t m t') m'
-    | otherwise = Winner e' (lbalance k p v t m t') m'
+    | p <= p'   = Winner e (rloser k' p' v' t m t') m'
+    | otherwise = Winner e' (lloser k p v t m t') m'
+{-# INLINE unsafePlay #-}
 
 data TourView a = Null
                 | Single {-# UNPACK #-} !(Elem a)
