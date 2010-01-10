@@ -25,7 +25,6 @@ module System.Event
 
 import Control.Concurrent (forkIO)
 import Control.Monad (sequence_, when)
-import Data.IntMap as IM
 import Data.IORef
 import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime,
                         getCurrentTime)
@@ -36,6 +35,7 @@ import System.Event.Internal (Backend, Event, evtRead, evtWrite, Timeout(..))
 import qualified System.Event.Internal as I
 import qualified System.Event.TimeoutTable as TT
 import System.Event.Control
+import qualified System.Event.IntMap as IM
 
 #if defined(BACKEND_KQUEUE)
 import qualified System.Event.KQueue as Backend
@@ -61,7 +61,7 @@ type TimeoutTable    = TT.TimeoutTable TimeRep TimeoutKey TimeoutCallback
 -- | The event manager state.
 data EventManager = forall a. Backend a => EventManager
     { emBackend      :: !a                     -- ^ Backend
-    , emIOCallbacks  :: !(IORef (IntMap IOCallback))   -- ^ I/O callbacks
+    , emIOCallbacks  :: !(IORef (IM.IntMap IOCallback))   -- ^ I/O callbacks
     , emTimeoutTable :: !(IORef TimeoutTable)  -- ^ Timeout table
     , emKeepRunning  :: !(IORef Bool)
     , emControl      :: !Control
@@ -81,7 +81,7 @@ handleControlEvent EventManager{..} fd _evt = do
 new :: IO EventManager
 new = do
   be <- Backend.new
-  iocbs <- newIORef empty
+  iocbs <- newIORef IM.empty
   timeouts <- newIORef TT.empty
   ctrl <- newControl
   run <- newIORef True
