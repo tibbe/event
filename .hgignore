@@ -3,6 +3,7 @@ syntax: glob
 *~
 *\#
 autom4te.cache
+benchmarks/PSQ
 benchmarks/Simple
 config.log
 config.mk
