@@ -6,7 +6,8 @@ import System.Event.PSQ (PSQ)
 import qualified System.Event.PSQ as Q
 
 main = defaultMain
-    [ bench "insert10k/min" $ whnf (Q.findMin . ascFrom) n
+    [ bench "atMost1k/length" $ whnf (atMostLength 1000) q
+    , bench "insert10k/min" $ whnf (Q.findMin . ascFrom) n
     , bench "delete1k/min" $ whnf (Q.findMin . deleteEveryN (n `div` 1000) n) q
     , bench "adjust1k/min" $ whnf (Q.findMin . adjustEveryN (n `div` 1000) n) q
     ]
@@ -16,6 +17,10 @@ main = defaultMain
 
     -- Priority queue with 'n' elements
     q = ascFrom n
+
+-- | Return the number of elements with priority at most @pt@
+atMostLength :: Q.Prio -> PSQ Int -> Int
+atMostLength pt q = length . fst . Q.atMost pt $ q
 
 -- | Create a priority queue with keys and priorities in ascending
 -- order starting at 0 and ending at @max@ (exclusive.)

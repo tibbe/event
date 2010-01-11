@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 -- Copyright (c) 2008, Ralf Hinze
 -- All rights reserved.
 --
@@ -257,7 +259,7 @@ atMost pt q = let (sequ, q') = atMosts pt q
               in (seqToList sequ, q')
 
 atMosts :: Prio -> PSQ a -> (Sequ (Elem a), PSQ a)
-atMosts pt q =
+atMosts !pt q =
     case minView q of
         Just (e, q') | prio e > pt -> (emptySequ, q)
         _ -> case tourView q of
