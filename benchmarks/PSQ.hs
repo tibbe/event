@@ -25,8 +25,8 @@ ascFrom max = go 0 Q.empty
     go :: Int -> PSQ Int -> PSQ Int
     go n !q
         | n >= max  = q
-        | otherwise = go (n + 1) $ Q.insert n' n' n q
-            where n' = fromIntegral n
+        | otherwise = go (n + 1) $
+                      Q.insert (fromIntegral n) (fromIntegral n) n q
 
 -- | Delete all keys that are multiples of @step@ but less than @max@.
 deleteEveryN :: Int -> Int -> PSQ a -> PSQ a
@@ -35,7 +35,7 @@ deleteEveryN step max q0 = go 0 q0
     go :: Int -> PSQ a -> PSQ a
     go n !q
         | n >= max  = q
-        | otherwise = go (n + step) $ Q.delete n q
+        | otherwise = go (n + step) $ Q.delete (fromIntegral n) q
 
 -- | Adjust the priority of all keys that are multiples of @step@ but
 -- less than @max@.
