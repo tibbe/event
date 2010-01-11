@@ -24,6 +24,57 @@ import qualified System.Event.Array as A
 #include <sys/time.h>
 
 ------------------------------------------------------------------------
+-- Exported interface
+
+data EventQueue = EventQueue {
+      eqFd       :: {-# UNPACK #-} !QueueFd
+    , eqChanges  :: {-# UNPACK #-} !(MVar (A.Array Event))
+    , eqEvents   :: {-# UNPACK #-} !(A.Array Event)
+    }
+
+instance E.Backend EventQueue where
+    new  = new
+    poll = poll
+    set  = set
+
+new :: IO EventQueue
+new = liftM3 EventQueue kqueue (newMVar =<< A.empty) (A.new 64)
+
+set :: EventQueue -> Fd -> E.Event -> IO ()
+set q fd evt = withMVar (eqChanges q) $ \ch ->
+    case undefined of
+      _ | evt `E.eventIs` E.evtRead  -> addChange ch filterRead
+        | evt `E.eventIs` E.evtWrite -> addChange ch filterWrite
+        | otherwise                  -> error $ "set: bad event " ++ show evt
+  where addChange ch filt =
+            A.snoc ch (Event (fromIntegral fd) filt flagAdd 0 0 0 0 0)
+
+poll :: EventQueue
+     -> Timeout
+     -> (Fd -> E.Event -> IO ())
+     -> IO E.Result
+poll EventQueue{..} tout f = do
+    changes <- swapMVar eqChanges =<< A.empty
+    changesLen <- A.length changes
+    len <- A.length eqEvents
+    when (changesLen > len) $ A.ensureCapacity eqEvents (2 * changesLen)
+    n <- A.useAsPtr changes $ \changesPtr chLen ->
+           A.unsafeLoad eqEvents $ \evPtr evCap ->
+             withTimeSpec (msToTimeSpec tout) $
+               kevent eqFd changesPtr chLen evPtr evCap
+
+    if n == 0 then
+        return E.TimedOut
+      else do
+        cap <- A.capacity eqEvents
+        when (n == cap) $
+          A.ensureCapacity eqEvents (2 * cap)
+
+        A.forM_ eqEvents $ \e -> f (fromIntegral (ident e)) (toEvent (filter e))
+
+        return E.Activity
+
+------------------------------------------------------------------------
 -- FFI binding
 
 newtype QueueFd = QueueFd CInt
@@ -152,57 +203,6 @@ msToTimeSpec (Timeout ms) = TimeSpec (toEnum sec) (toEnum nanosec)
 
     nanosec :: Int
     nanosec = (fromEnum ms - 1000*sec) * 1000000
-
-------------------------------------------------------------------------
--- Exported interface
-
-data EventQueue = EventQueue {
-      eqFd       :: {-# UNPACK #-} !QueueFd
-    , eqChanges  :: {-# UNPACK #-} !(MVar (A.Array Event))
-    , eqEvents   :: {-# UNPACK #-} !(A.Array Event)
-    }
-
-instance E.Backend EventQueue where
-    new  = new
-    poll = poll
-    set  = set
-
-new :: IO EventQueue
-new = liftM3 EventQueue kqueue (newMVar =<< A.empty) (A.new 64)
-
-set :: EventQueue -> Fd -> E.Event -> IO ()
-set q fd evt = withMVar (eqChanges q) $ \ch ->
-    case undefined of
-      _ | evt `E.eventIs` E.evtRead  -> addChange ch filterRead
-        | evt `E.eventIs` E.evtWrite -> addChange ch filterWrite
-        | otherwise                  -> error $ "set: bad event " ++ show evt
-  where addChange ch filt =
-            A.snoc ch (Event (fromIntegral fd) filt flagAdd 0 0 0 0 0)
-
-poll :: EventQueue
-     -> Timeout
-     -> (Fd -> E.Event -> IO ())
-     -> IO E.Result
-poll EventQueue{..} tout f = do
-    changes <- swapMVar eqChanges =<< A.empty
-    changesLen <- A.length changes
-    len <- A.length eqEvents
-    when (changesLen > len) $ A.ensureCapacity eqEvents (2 * changesLen)
-    n <- A.useAsPtr changes $ \changesPtr chLen ->
-           A.unsafeLoad eqEvents $ \evPtr evCap ->
-             withTimeSpec (msToTimeSpec tout) $
-               kevent eqFd changesPtr chLen evPtr evCap
-
-    if n == 0 then
-        return E.TimedOut
-      else do
-        cap <- A.capacity eqEvents
-        when (n == cap) $
-          A.ensureCapacity eqEvents (2 * cap)
-
-        A.forM_ eqEvents $ \e -> f (fromIntegral (ident e)) (toEvent (filter e))
-
-        return E.Activity
 
 fromEvent :: E.Event -> Filter
 fromEvent e = Filter (remap E.evtRead (#const EVFILT_READ) .|.
