@@ -46,7 +46,7 @@ data Control = W {
 #if defined(HAVE_EVENTFD)
     , controlEventFd :: {-# UNPACK #-} !Fd
 #endif
-    }
+    } deriving (Show)
 
 #if !defined(HAVE_EVENTFD)
 controlEventFd :: Control -> Fd
@@ -107,7 +107,7 @@ sendWakeup :: Control -> IO ()
 #if defined(HAVE_EVENTFD)
 sendWakeup c = alloca $ \p -> do
   poke p (1 :: Word64)
-  throwErrnoIfMinus1_ "writeControlMessage" $
+  throwErrnoIfMinus1_ "sendWakeup" $
     c_write (fromIntegral (controlEventFd c)) (castPtr p) 8
 #else
 sendWakeup c = sendControlMessage c CMsgWakeup

@@ -71,8 +71,12 @@ unsafeRead (Array ref) ix = do
 
 unsafeWrite :: Storable a => Array a -> Int -> a -> IO ()
 unsafeWrite (Array ref) ix a = do
-    AC es _ cap <- readIORef ref
-    CHECK_BOUNDS("unsafeWrite",cap,ix)
+    ac <- readIORef ref
+    unsafeWrite' ac ix a
+
+unsafeWrite' :: Storable a => AC a -> Int -> a -> IO ()
+unsafeWrite' (AC es _ cap) ix a = do
+    CHECK_BOUNDS("unsafeWrite'",cap,ix)
       pokeElemOff es ix a
 
 unsafeLoad :: Storable a => Array a -> (Ptr a -> Int -> IO Int) -> IO Int
@@ -84,10 +88,19 @@ unsafeLoad (Array ref) load = do
 
 ensureCapacity :: Storable a => Array a -> Int -> IO ()
 ensureCapacity (Array ref) c = do
-    AC es len cap <- readIORef ref
-    when (c > cap) $ do
+    ac@(AC _ _ cap) <- readIORef ref
+    ac'@(AC _ _ cap') <- ensureCapacity' ac c
+    when (cap' /= cap) $
+      writeIORef ref ac'
+
+ensureCapacity' :: Storable a => AC a -> Int -> IO (AC a)
+ensureCapacity' ac@(AC es len cap) c = do
+    if c > cap
+      then do
         es' <- reallocArray es cap'
-        writeIORef ref (AC es' len cap')
+        return (AC es' len cap')
+      else
+        return ac
   where
     cap' = firstPowerOf2 c
 
@@ -97,12 +110,11 @@ useAsPtr (Array ref) f = do
     f es len
 
 snoc :: Storable a => Array a -> a -> IO ()
-snoc arr@(Array ref) e = do
-    len <- length arr
+snoc (Array ref) e = do
+    ac@(AC _ len _) <- readIORef ref
     let len' = len + 1
-    ensureCapacity arr len'
-    unsafeWrite arr len e
-    AC es _ cap <- readIORef ref
+    ac'@(AC es _ cap) <- ensureCapacity' ac len'
+    unsafeWrite' ac' len e
     writeIORef ref (AC es len' cap)
 
 clear :: Storable a => Array a -> IO ()

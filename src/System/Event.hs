@@ -76,7 +76,7 @@ handleControlEvent EventManager{..} fd _evt = do
   msg <- readControlMessage emControl fd
   case msg of
     CMsgWakeup -> return ()
-    CMsgDie    -> atomicModifyIORef emKeepRunning (const (False, ()))
+    CMsgDie    -> writeIORef emKeepRunning False
 
 -- | Create and run a new event manager.
 new :: IO EventManager
