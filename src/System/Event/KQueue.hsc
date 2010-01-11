@@ -2,9 +2,11 @@
 
 module System.Event.KQueue where
 
+import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
 import Control.Monad
 import Data.Bits
-import Data.Monoid (Monoid(..))
+import Data.Int
+import Data.Word
 import Foreign.C.Error
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
@@ -28,37 +30,43 @@ newtype QueueFd = QueueFd CInt
     deriving (Eq, Show)
 
 data Event = Event {
-      ident  :: {-# UNPACK #-} !CUIntPtr
+      ident  :: {-# UNPACK #-} !Word64
     , filter :: {-# UNPACK #-} !Filter
     , flags  :: {-# UNPACK #-} !Flag
-    , fflags :: {-# UNPACK #-} !CUInt
-    , data_  :: {-# UNPACK #-} !CIntPtr
-    , udata  :: {-# UNPACK #-} !(Ptr ())
+    , fflags :: {-# UNPACK #-} !Word32
+    , data_  :: {-# UNPACK #-} !Int64
+    , udata  :: {-# UNPACK #-} !Word64
+    , ext0   :: {-# UNPACK #-} !Word64
+    , ext1   :: {-# UNPACK #-} !Word64
     } deriving Show
 
 instance Storable Event where
-    sizeOf _ = #size struct kevent
+    sizeOf _ = #size struct kevent64_s
     alignment _ = alignment (undefined :: CInt)
 
     peek ptr = do
-        ident'  <- #{peek struct kevent, ident} ptr
-        filter' <- #{peek struct kevent, filter} ptr
-        flags'  <- #{peek struct kevent, flags} ptr
-        fflags' <- #{peek struct kevent, fflags} ptr
-        data'   <- #{peek struct kevent, data} ptr
-        udata'  <- #{peek struct kevent, udata} ptr
-        return $ Event ident' (Filter filter') (Flag flags') fflags' data'
-            udata'
+        ident'  <- #{peek struct kevent64_s, ident} ptr
+        filter' <- #{peek struct kevent64_s, filter} ptr
+        flags'  <- #{peek struct kevent64_s, flags} ptr
+        fflags' <- #{peek struct kevent64_s, fflags} ptr
+        data'   <- #{peek struct kevent64_s, data} ptr
+        udata'  <- #{peek struct kevent64_s, udata} ptr
+        ext0'   <- #{peek struct kevent64_s, ext[0]} ptr
+        ext1'   <- #{peek struct kevent64_s, ext[1]} ptr
+        return $! Event ident' (Filter filter') (Flag flags') fflags' data'
+                        udata' ext0' ext1'
 
     poke ptr ev = do
-        #{poke struct kevent, ident} ptr (ident ev)
-        #{poke struct kevent, filter} ptr (unFilter $ filter ev)
-        #{poke struct kevent, flags} ptr (unFlag $ flags ev)
-        #{poke struct kevent, fflags} ptr (fflags ev)
-        #{poke struct kevent, data} ptr (data_ ev)
-        #{poke struct kevent, udata} ptr (udata ev)
+        #{poke struct kevent64_s, ident} ptr (ident ev)
+        #{poke struct kevent64_s, filter} ptr (unFilter $ filter ev)
+        #{poke struct kevent64_s, flags} ptr (unFlag $ flags ev)
+        #{poke struct kevent64_s, fflags} ptr (fflags ev)
+        #{poke struct kevent64_s, data} ptr (data_ ev)
+        #{poke struct kevent64_s, udata} ptr (udata ev)
+        #{poke struct kevent64_s, ext[0]} ptr (ext0 ev)
+        #{poke struct kevent64_s, ext[1]} ptr (ext1 ev)
 
-newtype Flag = Flag { unFlag :: CUShort }
+newtype Flag = Flag { unFlag :: Word16 }
     deriving (Eq, Show)
 
 #{enum Flag, Flag
@@ -110,11 +118,11 @@ instance Storable TimeSpec where
         #{poke struct timespec, tv_sec} ptr (tv_sec ts)
         #{poke struct timespec, tv_nsec} ptr (tv_nsec ts)
 
-foreign import ccall unsafe "event.h kqueue"
+foreign import ccall unsafe "sys/event.h kqueue"
     c_kqueue :: IO CInt
 
-foreign import ccall safe "event.h kevent"
-    c_kevent :: QueueFd -> Ptr Event -> CInt -> Ptr Event -> CInt
+foreign import ccall safe "sys/event.h kevent64"
+    c_kevent :: QueueFd -> Ptr Event -> CInt -> Ptr Event -> CInt -> CUInt
              -> Ptr TimeSpec -> IO CInt
 
 kqueue :: IO QueueFd
@@ -126,7 +134,7 @@ kevent :: QueueFd -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
        -> IO Int
 kevent k chs chlen evs evlen ts
     = fmap fromIntegral $ throwErrnoIfMinus1 "kevent" $
-      c_kevent k chs (fromIntegral chlen) evs (fromIntegral evlen) ts
+      c_kevent k chs (fromIntegral chlen) evs (fromIntegral evlen) 0 ts
 
 withTimeSpec :: TimeSpec -> (Ptr TimeSpec -> IO a) -> IO a
 withTimeSpec ts f =
@@ -150,37 +158,40 @@ msToTimeSpec (Timeout ms) = TimeSpec (toEnum sec) (toEnum nanosec)
 
 data EventQueue = EventQueue {
       eqFd       :: {-# UNPACK #-} !QueueFd
-    , eqChanges  :: {-# UNPACK #-} !(A.Array Event)
+    , eqChanges  :: {-# UNPACK #-} !(MVar (A.Array Event))
     , eqEvents   :: {-# UNPACK #-} !(A.Array Event)
     }
 
 instance E.Backend EventQueue where
-    new          = new
-    poll         = poll
-    set q fd evs = set q fd (fromEvent evs) flagAdd
+    new  = new
+    poll = poll
+    set  = set
 
 new :: IO EventQueue
-new = liftM3 EventQueue kqueue A.empty (A.new 64)
+new = liftM3 EventQueue kqueue (newMVar =<< A.empty) (A.new 64)
 
-set :: EventQueue -> Fd -> Filter -> Flag -> IO ()
-set q fd fltr flg =
-    A.snoc (eqChanges q) (Event (fromIntegral fd) fltr flg 0 0 nullPtr)
+set :: EventQueue -> Fd -> E.Event -> IO ()
+set q fd evt = withMVar (eqChanges q) $ \ch ->
+    case undefined of
+      _ | evt `E.eventIs` E.evtRead  -> addChange ch filterRead
+        | evt `E.eventIs` E.evtWrite -> addChange ch filterWrite
+        | otherwise                  -> error $ "set: bad event " ++ show evt
+  where addChange ch filt =
+            A.snoc ch (Event (fromIntegral fd) filt flagAdd 0 0 0 0 0)
 
 poll :: EventQueue
      -> Timeout
      -> (Fd -> E.Event -> IO ())
      -> IO E.Result
 poll EventQueue{..} tout f = do
-    changesLen <- A.length eqChanges
+    changes <- swapMVar eqChanges =<< A.empty
+    changesLen <- A.length changes
     len <- A.length eqEvents
     when (changesLen > len) $ A.ensureCapacity eqEvents (2 * changesLen)
-    n <- A.useAsPtr eqChanges $ \changesPtr chLen -> do
-           print ("before kevent",chLen)
+    n <- A.useAsPtr changes $ \changesPtr chLen ->
            A.unsafeLoad eqEvents $ \evPtr evCap ->
              withTimeSpec (msToTimeSpec tout) $
                kevent eqFd changesPtr chLen evPtr evCap
-    A.clear eqChanges
-    print ("after kevent", n)
 
     if n == 0 then
         return E.TimedOut
@@ -189,11 +200,7 @@ poll EventQueue{..} tout f = do
         when (n == cap) $
           A.ensureCapacity eqEvents (2 * cap)
 
-        A.forM_ eqEvents $ \e -> do
-            let ev = toEvent . filter $ e
-                fd = (fromIntegral . ident $ e)
-            print (fd,ev)
-            f fd ev
+        A.forM_ eqEvents $ \e -> f (fromIntegral (ident e)) (toEvent (filter e))
 
         return E.Activity
 
@@ -205,8 +212,7 @@ fromEvent e = Filter (remap E.evtRead (#const EVFILT_READ) .|.
             | otherwise         = 0
 
 toEvent :: Filter -> E.Event
-toEvent (Filter f) = remap (#const EVFILT_READ)  E.evtRead `mappend`
-                     remap (#const EVFILT_WRITE) E.evtWrite
-  where remap evt to
-            | f .&. evt /= 0 = to
-            | otherwise      = mempty
+toEvent (Filter f)
+    | f == (#const EVFILT_READ) = E.evtRead
+    | f == (#const EVFILT_WRITE) = E.evtWrite
+    | otherwise = error $ "toEvent: unknonwn filter " ++ show f
