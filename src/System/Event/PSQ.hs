@@ -83,6 +83,7 @@ module System.Event.PSQ
     , findMin
     , deleteMin
     , minView
+    , atMost
     ) where
 
 import Prelude hiding (lookup, null, foldl, foldr)
@@ -248,6 +249,23 @@ secondBest :: LTree a -> Key -> PSQ a
 secondBest Start _                 = Void
 secondBest (LLoser _ e tl m tr) m' = Winner e tl m `play` secondBest tr m'
 secondBest (RLoser _ e tl m tr) m' = secondBest tl m `play` Winner e tr m'
+
+-- | /O(r*(log n - log r))/ Return a list of elements ordered by
+-- key whose priorities are at most @pt@.
+atMost :: Prio -> PSQ a -> ([Elem a], PSQ a)
+atMost pt q = let (sequ, q') = atMosts pt q
+              in (seqToList sequ, q')
+
+atMosts :: Prio -> PSQ a -> (Sequ (Elem a), PSQ a)
+atMosts pt q =
+    case minView q of
+        Just (e, q') | prio e > pt -> (emptySequ, q)
+        _ -> case tourView q of
+            Null        -> (emptySequ, Void)
+            Single e    -> (singleSequ e, Void)  -- we know that prio b <= pt
+            t `Play` t' -> let (sequ, q') = atMosts pt t
+                               (sequ', q'') = atMosts pt t'
+                           in (sequ <> sequ', q' `play` q'')
 
 ------------------------------------------------------------------------
 -- Loser tree

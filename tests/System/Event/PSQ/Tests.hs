@@ -24,10 +24,20 @@ tests = testGroup "System.Event.PSQ" testlist
 testlist :: [Test]
 testlist =
     [ testProperty "adjust" propAdjust
+    , testProperty "atMost" propAtMost
     , testProperty "delete" propDelete
     , testProperty "insert" propInsert
     , testProperty "min" propMin
     ]
+
+propAtMost :: Q.Prio -> [(Q.Key, Q.Prio, Int)] -> Bool
+propAtMost pt es =
+    let (vs, q') = Q.atMost pt q
+    in (map toTuple vs, map toTuple (Q.toAscList q')) == atMost pt (fromList es)
+  where
+    q = Q.fromList $ map fromTuple es
+    toTuple (E k p v) = (k, p, v)
+    fromTuple (k, p, v) = E k p v
 
 propMin :: [(Q.Key, Q.Prio, Int)] -> Bool
 propAdjust k p (v :: Int) q =
@@ -87,3 +97,6 @@ fromList = foldr (\(k, p, v) q -> insert k p v q) []
 findMin :: Model a -> Maybe (Q.Key, Q.Prio, a)
 findMin [] = Nothing
 findMin xs = Just $ L.minimumBy cmpPrio xs
+
+atMost :: Q.Prio -> Model a -> ([(Q.Key, Q.Prio, a)], Model a)
+atMost pt = L.partition (\e@(_, p, _) -> p <= pt)
