@@ -93,7 +93,7 @@ data Elem a = E
     { key   :: {-# UNPACK #-} !Key
     , prio  :: {-# UNPACK #-} !Prio
     , value :: a
-    } deriving Show
+    } deriving (Eq, Show)
 
 ------------------------------------------------------------------------
 -- | A mapping from keys @k@ to priorites @p@.
@@ -105,9 +105,7 @@ data PSQ a = Void
            | Winner {-# UNPACK #-} !(Elem a)
                     !(LTree a)
                     {-# UNPACK #-} !Key  -- max key
-
-instance Show a => Show (PSQ a) where
-    show = show . toAscList
+           deriving (Eq, Show)
 
 -- | /O(1)/ The number of elements in a queue.
 size :: PSQ a -> Int
@@ -267,6 +265,7 @@ data LTree a = Start
                       !(LTree a)
                       {-# UNPACK #-} !Key  -- split key
                       !(LTree a)
+             deriving (Eq, Show)
 
 size' :: LTree a -> Size
 size' Start              = 0

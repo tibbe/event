@@ -5,21 +5,21 @@ module System.Event.PSQ.Tests (tests) where
 import System.Event.PSQ (Elem(..), PSQ)
 import qualified System.Event.PSQ as Q
 
+import Control.Monad (liftM3)
 import Data.Function (on)
 import qualified Data.List as L
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck (testProperty)
 import Test.QuickCheck
 
+instance Arbitrary a => Arbitrary (Elem a) where
+    arbitrary = liftM3 E arbitrary arbitrary arbitrary
+
 instance Arbitrary a => Arbitrary (PSQ a) where
-    arbitrary = do
-        ks <- arbitrary
-        ps <- arbitrary
-        vs <- arbitrary
-        return . Q.fromList $ zipWith3 E ks ps vs
+    arbitrary = Q.fromList `fmap` arbitrary
 
 tests :: Test
-tests = testGroup "System.Event.PSQ"  testlist
+tests = testGroup "System.Event.PSQ" testlist
 
 testlist :: [Test]
 testlist =
@@ -29,6 +29,7 @@ testlist =
     , testProperty "min" propMin
     ]
 
+propMin :: [(Q.Key, Q.Prio, Int)] -> Bool
 propAdjust k p (v :: Int) q =
     case Q.lookup k (Q.adjust (+ 1) k (Q.insert k p v q)) of
         Just (p', v') -> p + 1 == p'
@@ -42,12 +43,14 @@ propMin (xs :: [(Q.Key, Q.Prio, Int)]) =
         _                                   -> False
   where q = Q.fromList . map (\(k, p, v) -> E k p v) $ xs
 
-propInsert k p (v :: Int) q =
+propInsert :: Q.Key -> Q.Prio -> Int -> PSQ Int -> Bool
+propInsert k p v q =
     case Q.lookup k (Q.insert k p v q) of
         Just (p', v') -> p == p' && v == v'
         _             -> False
 
-propDelete k p (v :: Int) q =
+propDelete :: Q.Key -> Q.Prio -> Int -> PSQ Int -> Bool
+propDelete k p v q =
     case Q.lookup k (Q.delete k (Q.insert k p v q)) of
         Just _ -> False
         _      -> True
@@ -59,7 +62,10 @@ propDelete k p (v :: Int) q =
 -- order.
 type Model a = [(Q.Key, Q.Prio, a)]
 
+fst3 :: (a, b, c) -> a
 fst3 (x, _, _) = x
+
+snd3 :: (a, b, c) -> b
 snd3 (_, x, _) = x
 
 cmpKey :: (Q.Key, Q.Prio, a) -> (Q.Key, Q.Prio, a) -> Ordering
