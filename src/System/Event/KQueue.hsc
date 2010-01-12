@@ -22,6 +22,7 @@ import qualified System.Event.Array as A
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
+#include "EventConfig.h"
 
 ------------------------------------------------------------------------
 -- Exported interface
@@ -46,8 +47,7 @@ set q fd evt = withMVar (eqChanges q) $ \ch ->
       _ | evt `E.eventIs` E.evtRead  -> addChange ch filterRead
         | evt `E.eventIs` E.evtWrite -> addChange ch filterWrite
         | otherwise                  -> error $ "set: bad event " ++ show evt
-  where addChange ch filt =
-            A.snoc ch (Event (fromIntegral fd) filt flagAdd 0 0 0 0 0)
+  where addChange ch filt = A.snoc ch $ event fd filt flagAdd
 
 poll :: EventQueue
      -> Timeout
@@ -80,7 +80,8 @@ poll EventQueue{..} tout f = do
 newtype QueueFd = QueueFd CInt
     deriving (Eq, Show)
 
-data Event = Event {
+#if defined(HAVE_KEVENT64)
+data Event = KEvent64 {
       ident  :: {-# UNPACK #-} !Word64
     , filter :: {-# UNPACK #-} !Filter
     , flags  :: {-# UNPACK #-} !Flag
@@ -90,6 +91,9 @@ data Event = Event {
     , ext0   :: {-# UNPACK #-} !Word64
     , ext1   :: {-# UNPACK #-} !Word64
     } deriving Show
+
+event :: Fd -> Filter -> Flag -> Event
+event fd filt flag = KEvent64 (fromIntegral fd) filt flag 0 0 0 0 0
 
 instance Storable Event where
     sizeOf _ = #size struct kevent64_s
@@ -104,8 +108,8 @@ instance Storable Event where
         udata'  <- #{peek struct kevent64_s, udata} ptr
         ext0'   <- #{peek struct kevent64_s, ext[0]} ptr
         ext1'   <- #{peek struct kevent64_s, ext[1]} ptr
-        return $! Event ident' (Filter filter') (Flag flags') fflags' data'
-                        udata' ext0' ext1'
+        return $! KEvent64 ident' (Filter filter') (Flag flags') fflags' data'
+                           udata' ext0' ext1'
 
     poke ptr ev = do
         #{poke struct kevent64_s, ident} ptr (ident ev)
@@ -116,6 +120,41 @@ instance Storable Event where
         #{poke struct kevent64_s, udata} ptr (udata ev)
         #{poke struct kevent64_s, ext[0]} ptr (ext0 ev)
         #{poke struct kevent64_s, ext[1]} ptr (ext1 ev)
+#else
+data Event = KEvent {
+      ident  :: {-# UNPACK #-} !CUIntPtr
+    , filter :: {-# UNPACK #-} !Filter
+    , flags  :: {-# UNPACK #-} !Flag
+    , fflags :: {-# UNPACK #-} !Word32
+    , data_  :: {-# UNPACK #-} !CIntPtr
+    , udata  :: {-# UNPACK #-} !(Ptr ())
+    } deriving Show
+
+event :: Fd -> Filter -> Flag -> Event
+event fd filt flag = KEvent (fromIntegral fd) filt flag 0 0 nullPtr
+
+instance Storable Event where
+    sizeOf _ = #size struct kevent
+    alignment _ = alignment (undefined :: CInt)
+
+    peek ptr = do
+        ident'  <- #{peek struct kevent, ident} ptr
+        filter' <- #{peek struct kevent, filter} ptr
+        flags'  <- #{peek struct kevent, flags} ptr
+        fflags' <- #{peek struct kevent, fflags} ptr
+        data'   <- #{peek struct kevent, data} ptr
+        udata'  <- #{peek struct kevent, udata} ptr
+        return $! KEvent ident' (Filter filter') (Flag flags') fflags' data'
+                        udata'
+
+    poke ptr ev = do
+        #{poke struct kevent, ident} ptr (ident ev)
+        #{poke struct kevent, filter} ptr (unFilter $ filter ev)
+        #{poke struct kevent, flags} ptr (unFlag $ flags ev)
+        #{poke struct kevent, fflags} ptr (fflags ev)
+        #{poke struct kevent, data} ptr (data_ ev)
+        #{poke struct kevent, udata} ptr (udata ev)
+#endif
 
 newtype Flag = Flag { unFlag :: Word16 }
     deriving (Eq, Show)
@@ -131,9 +170,6 @@ newtype Flag = Flag { unFlag :: Word16 }
  , flagEof     = EV_EOF
  , flagError   = EV_ERROR
  }
-
-combineFlags :: [Flag] -> Flag
-combineFlags = Flag . foldr ((.|.) . unFlag) 0
 
 newtype Filter = Filter { unFilter :: CShort }
     deriving (Eq, Show)
@@ -169,13 +205,6 @@ instance Storable TimeSpec where
         #{poke struct timespec, tv_sec} ptr (tv_sec ts)
         #{poke struct timespec, tv_nsec} ptr (tv_nsec ts)
 
-foreign import ccall unsafe "sys/event.h kqueue"
-    c_kqueue :: IO CInt
-
-foreign import ccall safe "sys/event.h kevent64"
-    c_kevent :: QueueFd -> Ptr Event -> CInt -> Ptr Event -> CInt -> CUInt
-             -> Ptr TimeSpec -> IO CInt
-
 kqueue :: IO QueueFd
 kqueue = QueueFd `fmap` throwErrnoIfMinus1 "kqueue" c_kqueue
 
@@ -185,7 +214,11 @@ kevent :: QueueFd -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
        -> IO Int
 kevent k chs chlen evs evlen ts
     = fmap fromIntegral $ throwErrnoIfMinus1 "kevent" $
-      c_kevent k chs (fromIntegral chlen) evs (fromIntegral evlen) 0 ts
+#if defined(HAVE_KEVENT64)
+      c_kevent64 k chs (fromIntegral chlen) evs (fromIntegral evlen) 0 ts
+#else
+      c_kevent k chs (fromIntegral chlen) evs (fromIntegral evlen) ts
+#endif
 
 withTimeSpec :: TimeSpec -> (Ptr TimeSpec -> IO a) -> IO a
 withTimeSpec ts f =
@@ -216,3 +249,18 @@ toEvent (Filter f)
     | f == (#const EVFILT_READ) = E.evtRead
     | f == (#const EVFILT_WRITE) = E.evtWrite
     | otherwise = error $ "toEvent: unknonwn filter " ++ show f
+
+foreign import ccall unsafe "sys/event.h kqueue"
+    c_kqueue :: IO CInt
+
+#if defined(HAVE_KEVENT64)
+foreign import ccall safe "sys/event.h kevent64"
+    c_kevent64 :: QueueFd -> Ptr Event -> CInt -> Ptr Event -> CInt -> CUInt
+               -> Ptr TimeSpec -> IO CInt
+#elif defined(HAVE_KEVENT)
+foreign import ccall safe "sys/event.h kevent"
+    c_kevent :: QueueFd -> Ptr Event -> CInt -> Ptr Event -> CInt
+             -> Ptr TimeSpec -> IO CInt
+#else
+#error no kevent system call available
+#endif
