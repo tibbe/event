@@ -26,6 +26,7 @@ library
 
   other-modules:
     System.Event.Array
+    System.Event.Clock
     System.Event.Control
     System.Event.Internal
     System.Event.Vector
