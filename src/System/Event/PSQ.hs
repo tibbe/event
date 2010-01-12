@@ -263,7 +263,7 @@ atMost pt q = let (sequ, q') = atMosts pt q
 atMosts :: Prio -> PSQ a -> (Sequ (Elem a), PSQ a)
 atMosts !pt q =
     case minView q of
-        Just (e, q') | prio e > pt -> (emptySequ, q)
+        Just (e, _) | prio e > pt -> (emptySequ, q)
         _ -> case tourView q of
             Null        -> (emptySequ, Void)
             Single e    -> (singleSequ e, Void)  -- we know that prio b <= pt

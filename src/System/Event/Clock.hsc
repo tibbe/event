@@ -4,10 +4,9 @@ module System.Event.Clock (getCurrentTime) where
 
 #include <sys/time.h>
 
-import Foreign
-import Foreign.C
-import Foreign.C.Error
-import Foreign.C.Types
+import Foreign (Ptr, Storable(..), nullPtr, with)
+import Foreign.C.Error (throwErrnoIfMinus1_)
+import Foreign.C.Types (CInt, CLong)
 
 -- TODO: Implement this for Windows.
 
