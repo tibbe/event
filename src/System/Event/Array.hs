@@ -1,9 +1,10 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface #-}
 
 module System.Event.Array
     ( Array,
       empty,
       new,
+      duplicate,
       length,
       capacity,
       unsafeRead,
@@ -13,14 +14,17 @@ module System.Event.Array
       useAsPtr,
       snoc,
       clear,
-      forM_
+      forM_,
+      loop_
     ) where
 
 import Control.Monad (when)
-import Data.IORef
-import Foreign.Marshal.Array
-import Foreign.Ptr
-import Foreign.Storable
+import Data.IORef (IORef, atomicModifyIORef, newIORef, readIORef, writeIORef)
+import Foreign.C.Types (CSize)
+import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
+import Foreign.Ptr (Ptr, nullPtr, plusPtr)
+import Foreign.Storable (Storable(..))
+import GHC.ForeignPtr (mallocPlainForeignPtrBytes, newForeignPtr_)
 import Prelude hiding (length, mapM_)
 
 #define BOUNDS_CHECKING 1
@@ -39,19 +43,53 @@ newtype Array a = Array (IORef (AC a))
 
 -- The actual array content.
 data AC a = AC
-    !(Ptr a)  -- Elements
+    !(ForeignPtr a)  -- Elements
     !Int      -- Number of elements (length)
     !Int      -- Maximum number of elements (capacity)
 
 empty :: IO (Array a)
-empty = fmap Array (newIORef (AC nullPtr 0 0))
+empty = do
+  p <- newForeignPtr_ nullPtr
+  Array `fmap` newIORef (AC p 0 0)
+
+allocArray :: Storable a => Int -> IO (ForeignPtr a)
+allocArray n = allocHack undefined
+ where
+  allocHack :: Storable a => a -> IO (ForeignPtr a)
+  allocHack dummy = mallocPlainForeignPtrBytes (n * sizeOf dummy)
+
+reallocArray :: Storable a => ForeignPtr a -> Int -> Int -> IO (ForeignPtr a)
+reallocArray p newSize oldSize = reallocHack undefined p
+ where
+  reallocHack :: Storable a => a -> ForeignPtr a -> IO (ForeignPtr a)
+  reallocHack dummy src = do
+      let size = sizeOf dummy
+      dst <- mallocPlainForeignPtrBytes (newSize * size)
+      withForeignPtr src $ \s ->
+        when (s /= nullPtr && oldSize > 0) .
+          withForeignPtr dst $ \d -> do
+            memcpy d s (fromIntegral (oldSize * size))
+            return ()
+      return dst
 
 new :: Storable a => Int -> IO (Array a)
 new c = do
-    es <- mallocArray cap
+    es <- allocArray cap
     fmap Array (newIORef (AC es 0 cap))
   where
     cap = firstPowerOf2 c
+
+duplicate :: Storable a => Array a -> IO (Array a)
+duplicate a = dupHack undefined a
+ where
+  dupHack :: Storable b => b -> Array b -> IO (Array b)
+  dupHack dummy (Array ref) = do
+    AC es len cap <- readIORef ref
+    ary <- allocArray cap
+    withForeignPtr ary $ \dest ->
+      withForeignPtr es $ \src ->
+        memcpy dest src (fromIntegral (len * sizeOf dummy))
+    Array `fmap` newIORef (AC ary len cap)
 
 length :: Array a -> IO Int
 length (Array ref) = do
@@ -67,7 +105,8 @@ unsafeRead :: Storable a => Array a -> Int -> IO a
 unsafeRead (Array ref) ix = do
     AC es _ cap <- readIORef ref
     CHECK_BOUNDS("unsafeRead",cap,ix)
-      peekElemOff es ix
+      withForeignPtr es $ \p ->
+        peekElemOff p ix
 
 unsafeWrite :: Storable a => Array a -> Int -> a -> IO ()
 unsafeWrite (Array ref) ix a = do
@@ -77,12 +116,13 @@ unsafeWrite (Array ref) ix a = do
 unsafeWrite' :: Storable a => AC a -> Int -> a -> IO ()
 unsafeWrite' (AC es _ cap) ix a = do
     CHECK_BOUNDS("unsafeWrite'",cap,ix)
-      pokeElemOff es ix a
+      withForeignPtr es $ \p ->
+        pokeElemOff p ix a
 
 unsafeLoad :: Storable a => Array a -> (Ptr a -> Int -> IO Int) -> IO Int
 unsafeLoad (Array ref) load = do
     AC es _ cap <- readIORef ref
-    len' <- load es cap
+    len' <- withForeignPtr es $ \p -> load p cap
     writeIORef ref (AC es len' cap)
     return len'
 
@@ -97,7 +137,7 @@ ensureCapacity' :: Storable a => AC a -> Int -> IO (AC a)
 ensureCapacity' ac@(AC es len cap) c = do
     if c > cap
       then do
-        es' <- reallocArray es cap'
+        es' <- reallocArray es cap' cap
         return (AC es' len cap')
       else
         return ac
@@ -107,7 +147,7 @@ ensureCapacity' ac@(AC es len cap) c = do
 useAsPtr :: Array a -> (Ptr a -> Int -> IO b) -> IO b
 useAsPtr (Array ref) f = do
     AC es len _ <- readIORef ref
-    f es len
+    withForeignPtr es $ \p -> f p len
 
 snoc :: Storable a => Array a -> a -> IO ()
 snoc (Array ref) e = do
@@ -128,15 +168,36 @@ forM_ ary g = forHack ary g undefined
       AC es len _ <- readIORef ref
       let size = sizeOf dummy
           offset = len * size
-      let loop n
-              | n >= offset = return ()
-              | otherwise = do
-                    f =<< peek (es `plusPtr` n)
-                    loop (n + size)
-      loop 0
+      withForeignPtr es $ \p -> do
+        let loop n
+                | n >= offset = return ()
+                | otherwise = do
+                      f =<< peek (p `plusPtr` n)
+                      loop (n + size)
+        loop 0
+
+loop_ :: Storable a => Array a -> b -> (b -> a -> IO (b,Bool)) -> IO ()
+loop_ ary z g = loopHack ary z g undefined
+  where
+    loopHack :: Storable b => Array b -> c -> (c -> b -> IO (c,Bool)) -> b
+             -> IO ()
+    loopHack (Array ref) y f dummy = do
+      AC es len _ <- readIORef ref
+      let size = sizeOf dummy
+          offset = len * size
+      withForeignPtr es $ \p -> do
+        let loop n k
+                | n >= offset = return ()
+                | otherwise = do
+                      (k',go) <- f k =<< peek (p `plusPtr` n)
+                      when go $ loop (n + size) k'
+        loop 0 y
 
 firstPowerOf2 :: Int -> Int
 firstPowerOf2 n
     | n <= 0    = 0
     | otherwise = 2^p
   where p = (ceiling . logBase (2 :: Double) . realToFrac) n :: Int
+
+foreign import ccall unsafe "string.h memcpy"
+    memcpy :: Ptr a -> Ptr a -> CSize -> IO (Ptr a)
