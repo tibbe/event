@@ -31,6 +31,7 @@ library
     System.Event.IntMap
     System.Event.Internal
     System.Event.KQueue
+    System.Event.PSQ
     System.Event.Poll
     System.Event.Unique
 
