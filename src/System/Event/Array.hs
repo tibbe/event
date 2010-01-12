@@ -15,7 +15,9 @@ module System.Event.Array
       snoc,
       clear,
       forM_,
-      loop_
+      loop,
+      concat,
+      copy
     ) where
 
 import Control.Monad (when)
@@ -25,7 +27,7 @@ import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
 import Foreign.Ptr (Ptr, nullPtr, plusPtr)
 import Foreign.Storable (Storable(..))
 import GHC.ForeignPtr (mallocPlainForeignPtrBytes, newForeignPtr_)
-import Prelude hiding (length, mapM_)
+import Prelude hiding (concat, length)
 
 #define BOUNDS_CHECKING 1
 
@@ -68,7 +70,7 @@ reallocArray p newSize oldSize = reallocHack undefined p
       withForeignPtr src $ \s ->
         when (s /= nullPtr && oldSize > 0) .
           withForeignPtr dst $ \d -> do
-            memcpy d s (fromIntegral (oldSize * size))
+            _ <- memcpy d s (fromIntegral (oldSize * size))
             return ()
       return dst
 
@@ -87,8 +89,9 @@ duplicate a = dupHack undefined a
     AC es len cap <- readIORef ref
     ary <- allocArray cap
     withForeignPtr ary $ \dest ->
-      withForeignPtr es $ \src ->
-        memcpy dest src (fromIntegral (len * sizeOf dummy))
+      withForeignPtr es $ \src -> do
+        _ <- memcpy dest src (fromIntegral (len * sizeOf dummy))
+        return ()
     Array `fmap` newIORef (AC ary len cap)
 
 length :: Array a -> IO Int
@@ -169,15 +172,14 @@ forM_ ary g = forHack ary g undefined
       let size = sizeOf dummy
           offset = len * size
       withForeignPtr es $ \p -> do
-        let loop n
-                | n >= offset = return ()
-                | otherwise = do
-                      f =<< peek (p `plusPtr` n)
-                      loop (n + size)
-        loop 0
+        let go n | n >= offset = return ()
+                 | otherwise = do
+              f =<< peek (p `plusPtr` n)
+              go (n + size)
+        go 0
 
-loop_ :: Storable a => Array a -> b -> (b -> a -> IO (b,Bool)) -> IO ()
-loop_ ary z g = loopHack ary z g undefined
+loop :: Storable a => Array a -> b -> (b -> a -> IO (b,Bool)) -> IO ()
+loop ary z g = loopHack ary z g undefined
   where
     loopHack :: Storable b => Array b -> c -> (c -> b -> IO (c,Bool)) -> b
              -> IO ()
@@ -186,12 +188,48 @@ loop_ ary z g = loopHack ary z g undefined
       let size = sizeOf dummy
           offset = len * size
       withForeignPtr es $ \p -> do
-        let loop n k
+        let go n k
                 | n >= offset = return ()
                 | otherwise = do
-                      (k',go) <- f k =<< peek (p `plusPtr` n)
-                      when go $ loop (n + size) k'
-        loop 0 y
+                      (k',cont) <- f k =<< peek (p `plusPtr` n)
+                      when cont $ go (n + size) k'
+        go 0 y
+
+concat :: Storable a => Array a -> Array a -> IO ()
+concat (Array d) (Array s) = do
+  da@(AC _ dlen _) <- readIORef d
+  sa@(AC _ slen _) <- readIORef s
+  writeIORef d =<< copy' da dlen sa 0 slen
+
+-- | Copy part of the source array into the destination array. The
+-- destination array is resized if not large enough.
+copy :: Storable a => Array a -> Int -> Array a -> Int -> Int -> IO ()
+copy (Array d) dstart (Array s) sstart maxCount = do
+  da <- readIORef d
+  sa <- readIORef s
+  writeIORef d =<< copy' da dstart sa sstart maxCount
+
+-- | Copy part of the source array into the destination array. The
+-- destination array is resized if not large enough.
+copy' :: Storable a => AC a -> Int -> AC a -> Int -> Int -> IO (AC a)
+copy' d dstart s sstart maxCount = copyHack d s undefined
+ where
+  copyHack :: Storable b => AC b -> AC b -> b -> IO (AC b)
+  copyHack dac@(AC _ oldLen _) (AC src slen _) dummy = do
+    when (maxCount < 0 || dstart < 0 || dstart > oldLen || sstart < 0 ||
+          sstart > slen) $ error "copy: bad offsets or lengths"
+    let size = sizeOf dummy
+        count = min maxCount (slen - sstart)
+    if count == 0
+      then return dac
+      else do
+        AC dst dlen dcap <- ensureCapacity' dac (dstart + count)
+        withForeignPtr dst $ \dptr ->
+          withForeignPtr src $ \sptr -> do
+            _ <- memcpy (dptr `plusPtr` (dstart * size))
+                        (sptr `plusPtr` (sstart * size))
+                        (fromIntegral (count * size))
+            return $! AC dst (max dlen (dstart + count)) dcap
 
 firstPowerOf2 :: Int -> Int
 firstPowerOf2 n

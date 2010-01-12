@@ -7,7 +7,8 @@ module System.Event.Poll where
 #if defined(HAVE_POLL_H)
 #include <poll.h>
 
-import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, withMVar)
+import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
+import Control.Monad (liftM2)
 import Data.Bits (Bits, (.|.), (.&.))
 import Data.Monoid (Monoid(..))
 import Foreign.C.Error (throwErrnoIfMinus1)
@@ -18,8 +19,9 @@ import qualified System.Event.Array as A
 import qualified System.Event.Internal as E
 import System.Posix.Types (Fd(..))
 
-newtype Poll = Poll {
-      pollFd :: MVar (A.Array PollFd)
+data Poll = Poll {
+      pollChanges :: !(MVar (A.Array PollFd))
+    , pollFd      :: !(A.Array PollFd)
     }
 
 instance E.Backend Poll where
@@ -28,11 +30,11 @@ instance E.Backend Poll where
     set  = set
 
 new :: IO Poll
-new = fmap Poll . newMVar =<< A.empty
+new = liftM2 Poll (newMVar =<< A.empty) A.empty
 
 -- TODO: Modify an existing pollfd if one already exists for the given fd.
 set :: Poll -> Fd -> E.Event -> IO ()
-set p fd evt = withMVar (pollFd p) $ \pfd ->
+set p fd evt = withMVar (pollChanges p) $ \pfd ->
                  A.snoc pfd $ PollFd fd (fromEvent evt) 0
 
 poll :: Poll
@@ -40,15 +42,14 @@ poll :: Poll
      -> (Fd -> E.Event -> IO ())
      -> IO E.Result
 poll p tout f = do
-  a <- modifyMVar (pollFd p) $ \a -> do
-                  b <- A.duplicate a
-                  return (b,a)
+  let a = pollFd p
+  A.concat a =<< swapMVar (pollChanges p) =<< A.empty
   n <- A.useAsPtr a $ \ptr len -> throwErrnoIfMinus1 "c_poll" $
          c_poll ptr (fromIntegral len) (fromIntegral (fromTimeout tout))
   if n == 0
     then return E.TimedOut
     else do
-      A.loop_ a 0 $ \i e -> do
+      A.loop a 0 $ \i e -> do
         let r = pfdRevents e
         if r /= 0
           then do f (pfdFd e) (toEvent r)
