@@ -26,7 +26,7 @@ module System.Event
 -- Imports
 
 import Control.Concurrent (forkIO)
-import Control.Monad (sequence_, when)
+import Control.Monad (when)
 import Data.IORef
 import System.Posix.Types (Fd)
 
@@ -126,12 +126,12 @@ loop mgr@EventManager{..} = go =<< getCurrentTime
     mkTimeout :: TimeRep -> IO Timeout
     mkTimeout now = do
         (expired, q') <- atomicModifyIORef emTimeouts $ \q ->
-            let res@(expired, q') = Q.atMost now q
+            let res@(_expired, q') = Q.atMost now q
             in (q', res)
         sequence_ $ map Q.value expired
         case Q.minView q' of
             Nothing             -> return Forever
-            Just (Q.E _ t _, _) -> return $ Timeout $ floor (t - now)
+            Just (Q.E _ t _, _) -> return $! Timeout $ floor (t - now)
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
