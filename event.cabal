@@ -32,8 +32,6 @@ library
     System.Event.Internal
     System.Event.KQueue
     System.Event.Poll
-    System.Event.TimeoutTable
-    System.Event.TimeoutTable.Internal
     System.Event.Unique
 
   build-depends:
