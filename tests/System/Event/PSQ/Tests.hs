@@ -14,9 +14,11 @@ import Test.QuickCheck
 
 instance Arbitrary a => Arbitrary (Elem a) where
     arbitrary = liftM3 E arbitrary arbitrary arbitrary
+    coarbitrary = undefined
 
 instance Arbitrary a => Arbitrary (PSQ a) where
     arbitrary = Q.fromList `fmap` arbitrary
+    coarbitrary = undefined
 
 tests :: Test
 tests = testGroup "System.Event.PSQ" testlist
@@ -39,13 +41,14 @@ propAtMost pt es =
     toTuple (E k p v) = (k, p, v)
     fromTuple (k, p, v) = E k p v
 
-propMin :: [(Q.Key, Q.Prio, Int)] -> Bool
-propAdjust k p (v :: Int) q =
-    case Q.lookup k (Q.adjust (+ 1) k (Q.insert k p v q)) of
-        Just (p', v') -> p + 1 == p'
+propAdjust :: Q.Key -> Q.Prio -> Int -> PSQ Int -> Q.Prio -> Property
+propAdjust k p v q p' = p /= p' ==>
+    case Q.lookup k (Q.adjust (const p') k (Q.insert k p v q)) of
+        Just (p'', _) -> p' == p''
         _             -> False
 
-propMin (xs :: [(Q.Key, Q.Prio, Int)]) =
+propMin :: [(Q.Key, Q.Prio, Int)] -> Bool
+propMin xs =
     case (findMin $ fromList xs, Q.findMin q) of
         (Nothing, Nothing)      -> True
         (Just (k, p, v), Just (E k' p' v')) ->

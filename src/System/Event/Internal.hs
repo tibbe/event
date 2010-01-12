@@ -46,7 +46,7 @@ evtCombine (Event a) (Event b) = Event (a .|. b)
 {-# INLINE evtCombine #-}
 
 -- | A type alias for timeouts
-data Timeout = Timeout CInt
+data Timeout = Timeout CInt  -- in milliseconds
              | Forever
 
 -- | Indicates whether poll returned because of activity or timeout
@@ -59,7 +59,7 @@ class Backend a where
 
     -- | Poll backend for new events.  The provided callback is called
     -- once per file descriptor with new events.
-    poll :: a                          -- ^ backend state 
+    poll :: a                          -- ^ backend state
          -> Timeout                    -- ^ timeout in milliseconds
          -> (Fd -> Event -> IO ())     -- ^ I/O callback
          -> IO Result
