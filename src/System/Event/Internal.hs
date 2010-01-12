@@ -46,8 +46,8 @@ evtCombine :: Event -> Event -> Event
 evtCombine (Event a) (Event b) = Event (a .|. b)
 {-# INLINE evtCombine #-}
 
--- | A type alias for timeouts
-data Timeout = Timeout CInt  -- in milliseconds
+-- | A type alias for timeouts, specified in milliseconds.
+data Timeout = Timeout CInt
              | Forever
 
 -- | Indicates whether poll returned because of activity or timeout

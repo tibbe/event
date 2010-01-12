@@ -43,6 +43,8 @@ import System.Event.Unique
 import qualified System.Event.KQueue as Backend
 #elif defined(HAVE_EPOLL)
 import qualified System.Event.EPoll  as Backend
+#elif defined(HAVE_POLL)
+import qualified System.Event.Poll   as Backend
 #else
 # error not implemented for this operating system
 #endif
