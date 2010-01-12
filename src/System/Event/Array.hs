@@ -229,7 +229,7 @@ copy' d dstart s sstart maxCount = copyHack d s undefined
             _ <- memcpy (dptr `plusPtr` (dstart * size))
                         (sptr `plusPtr` (sstart * size))
                         (fromIntegral (count * size))
-            return $! AC dst (max dlen (dstart + count)) dcap
+            return $ AC dst (max dlen (dstart + count)) dcap
 
 firstPowerOf2 :: Int -> Int
 firstPowerOf2 n

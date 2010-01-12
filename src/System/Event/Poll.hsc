@@ -105,7 +105,7 @@ instance Storable PollFd where
       fd <- #{peek struct pollfd, fd} ptr
       events <- #{peek struct pollfd, events} ptr
       revents <- #{peek struct pollfd, revents} ptr
-      return $! PollFd fd events revents
+      return $ PollFd fd events revents
 
     poke ptr p = do
       #{poke struct pollfd, fd} ptr (pfdFd p)

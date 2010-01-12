@@ -126,12 +126,11 @@ loop mgr@EventManager{..} = go =<< getCurrentTime
     mkTimeout :: TimeRep -> IO Timeout
     mkTimeout now = do
         (expired, q') <- atomicModifyIORef emTimeouts $ \q ->
-            let res@(_expired, q') = Q.atMost now q
-            in (q', res)
+            let res@(_, q') = Q.atMost now q in (q', res)
         sequence_ $ map Q.value expired
         case Q.minView q' of
             Nothing             -> return Forever
-            Just (Q.E _ t _, _) -> return $! Timeout $ floor (t - now)
+            Just (Q.E _ t _, _) -> return $ Timeout $ floor (t - now)
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events

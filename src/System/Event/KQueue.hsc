@@ -8,7 +8,6 @@ module System.Event.KQueue where
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
 import Control.Monad
 import Data.Bits
-import Data.Int
 import Data.Word
 import Foreign.C.Error
 import Foreign.C.Types
@@ -110,8 +109,8 @@ instance Storable Event where
         udata'  <- #{peek struct kevent64_s, udata} ptr
         ext0'   <- #{peek struct kevent64_s, ext[0]} ptr
         ext1'   <- #{peek struct kevent64_s, ext[1]} ptr
-        return $! KEvent64 ident' (Filter filter') (Flag flags') fflags' data'
-                           udata' ext0' ext1'
+        return $ KEvent64 ident' (Filter filter') (Flag flags') fflags' data'
+                          udata' ext0' ext1'
 
     poke ptr ev = do
         #{poke struct kevent64_s, ident} ptr (ident ev)
@@ -146,7 +145,7 @@ instance Storable Event where
         fflags' <- #{peek struct kevent, fflags} ptr
         data'   <- #{peek struct kevent, data} ptr
         udata'  <- #{peek struct kevent, udata} ptr
-        return $! KEvent ident' (Filter filter') (Flag flags') fflags' data'
+        return $ KEvent ident' (Filter filter') (Flag flags') fflags' data'
                         udata'
 
     poke ptr ev = do
