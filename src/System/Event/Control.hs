@@ -19,16 +19,21 @@ module System.Event.Control
 
 #include "EventConfig.h"
 
-import Data.Word (Word64)
-import Foreign.C.Error (throwErrnoIfMinus1_, throwErrnoIfMinus1)
-import Foreign.C.Types (CInt)
-import Foreign.Marshal (alloca, allocaBytes)
+import Foreign.C.Error (throwErrnoIfMinus1_)
+import Foreign.Marshal (alloca)
 import Foreign.Marshal.Array (allocaArray)
-import Foreign.Ptr (castPtr)
 import Foreign.Storable (peek, peekElemOff, poke)
 import System.Posix.Internals (c_close, c_pipe, c_read, c_write,
                                setCloseOnExec, setNonBlockingFD)
 import System.Posix.Types (Fd)
+
+#if defined(HAVE_EVENTFD)
+import Data.Word (Word64)
+import Foreign.C.Error (throwErrnoIfMinus1)
+import Foreign.C.Types (CInt)
+import Foreign.Marshal (allocaBytes)
+import Foreign.Ptr (castPtr)
+#endif
 
 data ControlMessage = CMsgWakeup
                     | CMsgDie
@@ -41,7 +46,7 @@ data Control = W {
 #if defined(HAVE_EVENTFD)
     , controlEventFd :: {-# UNPACK #-} !Fd
 #endif
-    }
+    } deriving (Show)
 
 #if !defined(HAVE_EVENTFD)
 controlEventFd :: Control -> Fd
@@ -78,17 +83,17 @@ newControl = allocaArray 2 $ \fds -> do
 -- | Close the control structure used by the IO manager thread.
 closeControl :: Control -> IO ()
 closeControl w = do
-  c_close . fromIntegral . controlReadFd $ w
-  c_close . fromIntegral . controlWriteFd $ w
+  _ <- c_close . fromIntegral . controlReadFd $ w
+  _ <- c_close . fromIntegral . controlWriteFd $ w
 #if defined(HAVE_EVENTFD)
-  c_close . fromIntegral . controlEventFd $ w
+  _ <- c_close . fromIntegral . controlEventFd $ w
 #endif
   return ()
 
 readControlMessage :: Control -> Fd -> IO ControlMessage
-readControlMessage w fd
+readControlMessage ctrl fd
 #if defined(HAVE_EVENTFD)
-    | fd == controlEventFd w = allocaBytes 8 $ \p -> do
+    | fd == controlEventFd ctrl = allocaBytes 8 $ \p -> do
                     throwErrnoIfMinus1_ "readControlMessage" $
                       c_read (fromIntegral fd) p 8
                     return CMsgWakeup
@@ -102,7 +107,7 @@ sendWakeup :: Control -> IO ()
 #if defined(HAVE_EVENTFD)
 sendWakeup c = alloca $ \p -> do
   poke p (1 :: Word64)
-  throwErrnoIfMinus1_ "writeControlMessage" $
+  throwErrnoIfMinus1_ "sendWakeup" $
     c_write (fromIntegral (controlEventFd c)) (castPtr p) 8
 #else
 sendWakeup c = sendControlMessage c CMsgWakeup

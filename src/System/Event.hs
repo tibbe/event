@@ -24,18 +24,18 @@ module System.Event
 -- Imports
 
 import Control.Concurrent (forkIO)
-import Control.Monad (sequence_, when)
-import Data.IntMap as IM
+import Control.Monad (when)
 import Data.IORef
 import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime,
                         getCurrentTime)
-import Data.Unique
 import System.Posix.Types (Fd)
 
 import System.Event.Internal (Backend, Event, evtRead, evtWrite, Timeout(..))
 import qualified System.Event.Internal as I
 import qualified System.Event.TimeoutTable as TT
 import System.Event.Control
+import qualified System.Event.IntMap as IM
+import System.Event.Unique
 
 #if defined(BACKEND_KQUEUE)
 import qualified System.Event.KQueue as Backend
@@ -61,9 +61,10 @@ type TimeoutTable    = TT.TimeoutTable TimeRep TimeoutKey TimeoutCallback
 -- | The event manager state.
 data EventManager = forall a. Backend a => EventManager
     { emBackend      :: !a                     -- ^ Backend
-    , emIOCallbacks  :: !(IORef (IntMap IOCallback))   -- ^ I/O callbacks
+    , emIOCallbacks  :: !(IORef (IM.IntMap IOCallback))   -- ^ I/O callbacks
     , emTimeoutTable :: !(IORef TimeoutTable)  -- ^ Timeout table
     , emKeepRunning  :: !(IORef Bool)
+    , emUniqueSource :: !UniqueSource
     , emControl      :: !Control
     }
 
@@ -75,20 +76,22 @@ handleControlEvent EventManager{..} fd _evt = do
   msg <- readControlMessage emControl fd
   case msg of
     CMsgWakeup -> return ()
-    CMsgDie    -> atomicModifyIORef emKeepRunning (const (False, ()))
+    CMsgDie    -> writeIORef emKeepRunning False
 
 -- | Create and run a new event manager.
 new :: IO EventManager
 new = do
   be <- Backend.new
-  iocbs <- newIORef empty
+  iocbs <- newIORef IM.empty
   timeouts <- newIORef TT.empty
   ctrl <- newControl
   run <- newIORef True
+  us <- newSource
   let mgr = EventManager { emBackend = be
                          , emIOCallbacks = iocbs
                          , emTimeoutTable = timeouts
                          , emKeepRunning = run
+                         , emUniqueSource = us
                          , emControl = ctrl
                          }
       read_fd  = controlReadFd ctrl
@@ -96,7 +99,7 @@ new = do
   registerFd_ mgr (handleControlEvent mgr) read_fd evtRead
   when (read_fd /= event_fd) $
     registerFd_ mgr (handleControlEvent mgr) event_fd evtRead
-  forkIO $ loop mgr
+  _ <- forkIO $ loop mgr
   return mgr
 
 ------------------------------------------------------------------------
@@ -104,11 +107,11 @@ new = do
 
 -- | Start handling events.  This function returns when told to.
 loop :: EventManager -> IO ()
-loop mgr@(EventManager be _ tt run _) = go =<< getCurrentTime
+loop mgr@EventManager{..} = go =<< getCurrentTime
   where
     go now = do
         timeout <- mkTimeout now
-        reason  <- I.poll be timeout ioCallback
+        reason  <- I.poll emBackend timeout ioCallback
 
         now'    <- getCurrentTime
 
@@ -116,7 +119,7 @@ loop mgr@(EventManager be _ tt run _) = go =<< getCurrentTime
           I.TimedOut -> timeoutCallback now'
           _          -> return ()
 
-        keepRunning <- atomicModifyIORef run $ \r -> (r,r)
+        keepRunning <- readIORef emKeepRunning
         when keepRunning $
           go now'
 
@@ -130,7 +133,7 @@ loop mgr@(EventManager be _ tt run _) = go =<< getCurrentTime
     ioCallback      = onFdEvent mgr
 
     mkTimeout now = do
-        tt' <- readIORef tt
+        tt' <- readIORef emTimeoutTable
 
         -- If there are expired items in the timeout table then we
         -- need to run the callback now; normally this would be
@@ -165,7 +168,7 @@ registerTimeout :: EventManager -> Int -> TimeoutCallback -> IO TimeoutKey
 registerTimeout EventManager{..} ms cb = do
     now <- getCurrentTime
     let expTime = addUTCTime (1000 * fromIntegral ms) now
-    key <- newUnique
+    key <- newUnique emUniqueSource
 
     atomicModifyIORef emTimeoutTable $ \tab ->
         (TT.insert expTime key cb tab, ())

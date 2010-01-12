@@ -15,7 +15,7 @@ import Data.Function (on)
 import Data.IORef (IORef, atomicModifyIORef, newIORef)
 import Data.Int (Int32)
 import Data.Monoid (Monoid(..), Last(..))
-import Foreign.C.Error (throwErrnoIfMinus1Retry)
+import Foreign.C.Error (throwErrnoIfMinus1Retry, throwErrnoIfMinus1Retry_)
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr)
 import Foreign.C.Types (CChar)
@@ -105,9 +105,7 @@ main = do
 
 readByte :: Fd -> IO ()
 readByte (Fd fd) =
-    alloca $ \p -> do
-      n <- throwErrnoIfMinus1Retry "readByte" $ c_read fd p 1
-      when (n /= 1) . error $ "readByte returned " ++ show n
+    alloca $ \p -> throwErrnoIfMinus1Retry_ "readByte" $ c_read fd p 1
 
 writeByte :: Fd -> IO ()
 writeByte (Fd fd) =

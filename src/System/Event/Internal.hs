@@ -33,9 +33,10 @@ eventIs :: Event -> Event -> Bool
 eventIs (Event a) (Event b) = a .&. b /= 0
 
 instance Show Event where
-    show e | e `eventIs` evtRead  = "evtRead"
-           | e `eventIs` evtWrite = "evtWrite"
-           | otherwise            = error "show: illegal value"
+    show e = show . filter (not . null) $
+             [evtRead `so` "evtRead", evtWrite `so` "evtWrite"]
+        where ev `so` disp | e `eventIs` ev = disp
+                           | otherwise      = ""
 
 instance Monoid Event where
     mempty  = evtNothing
