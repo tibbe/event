@@ -26,15 +26,14 @@ module System.Event
 -- Imports
 
 import Control.Concurrent (forkIO)
-import Control.Monad (when)
+import Control.Monad (sequence_, when)
 import Data.IORef
-import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime,
-                        getCurrentTime)
 import System.Posix.Types (Fd)
 
+import System.Event.Clock
 import System.Event.Internal (Backend, Event, evtRead, evtWrite, Timeout(..))
 import qualified System.Event.Internal as I
-import qualified System.Event.TimeoutTable as TT
+import qualified System.Event.PSQ as Q
 import System.Event.Control
 import qualified System.Event.IntMap as IM
 import System.Event.Unique
@@ -55,18 +54,17 @@ import qualified System.Event.Poll   as Backend
 -- | Callback invoked on I/O events.
 type IOCallback = Fd -> Event -> IO ()
 
--- FIXME: choose a quicker time representation than UTCTime? We'll be calling
--- "getCurrentTime" a lot.
-type TimeRep         = UTCTime
+type TimeRep         = Double
 type TimeoutKey      = Unique
+
+-- | Callback invoked on timeout events.
 type TimeoutCallback = IO ()
-type TimeoutTable    = TT.TimeoutTable TimeRep TimeoutKey TimeoutCallback
 
 -- | The event manager state.
 data EventManager = forall a. Backend a => EventManager
     { emBackend      :: !a                     -- ^ Backend
     , emIOCallbacks  :: !(IORef (IM.IntMap IOCallback))   -- ^ I/O callbacks
-    , emTimeoutTable :: !(IORef TimeoutTable)  -- ^ Timeout table
+    , emTimeouts     :: !(IORef (Q.PSQ TimeoutCallback))  -- ^ Timeouts
     , emKeepRunning  :: !(IORef Bool)
     , emUniqueSource :: !UniqueSource
     , emControl      :: !Control
@@ -87,13 +85,13 @@ new :: IO EventManager
 new = do
   be <- Backend.new
   iocbs <- newIORef IM.empty
-  timeouts <- newIORef TT.empty
+  timeouts <- newIORef Q.empty
   ctrl <- newControl
   run <- newIORef True
   us <- newSource
   let mgr = EventManager { emBackend = be
                          , emIOCallbacks = iocbs
-                         , emTimeoutTable = timeouts
+                         , emTimeouts = timeouts
                          , emKeepRunning = run
                          , emUniqueSource = us
                          , emControl = ctrl
@@ -115,39 +113,25 @@ loop mgr@EventManager{..} = go =<< getCurrentTime
   where
     go now = do
         timeout <- mkTimeout now
-        reason  <- I.poll emBackend timeout ioCallback
+        _ <- I.poll emBackend timeout (onFdEvent mgr)
 
         now'    <- getCurrentTime
-
-        case reason of
-          I.TimedOut -> timeoutCallback now'
-          _          -> return ()
 
         keepRunning <- readIORef emKeepRunning
         when keepRunning $
           go now'
 
-    inMs :: NominalDiffTime -> Maybe Timeout
-    inMs d =
-        if v <= 0 then Nothing else Just $ Timeout v
-      where
-        v = floor (1000 * d)
-
-    timeoutCallback = onTimeoutEvent mgr
-    ioCallback      = onFdEvent mgr
-
+    -- | Call all expired timer callbacks and return the time to the
+    -- next timeout.
+    mkTimeout :: TimeRep -> IO Timeout
     mkTimeout now = do
-        tt' <- readIORef emTimeoutTable
-
-        -- If there are expired items in the timeout table then we
-        -- need to run the callback now; normally this would be
-        -- handled within I.poll but it could happen if e.g. one of
-        -- the timeout callbacks took a long time
-        case TT.findOldest tt' of
-          Nothing       -> return Forever
-          Just (tm,_,_) -> case inMs (diffUTCTime tm now) of
-                             Nothing -> timeoutCallback now >> mkTimeout now
-                             Just t  -> return t
+        (expired, q') <- atomicModifyIORef emTimeouts $ \q ->
+            let res@(expired, q') = Q.atMost now q
+            in (q', res)
+        sequence_ $ map Q.value expired
+        case Q.minView q' of
+            Nothing             -> return Forever
+            Just (Q.E _ t _, _) -> return $ Timeout $ floor (t - now)
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
@@ -171,25 +155,26 @@ registerFd mgr cb fd evs = do
 registerTimeout :: EventManager -> Int -> TimeoutCallback -> IO TimeoutKey
 registerTimeout EventManager{..} ms cb = do
     now <- getCurrentTime
-    let expTime = addUTCTime (1000 * fromIntegral ms) now
+    let expTime = fromIntegral (1000 * ms) + now
     key <- newUnique emUniqueSource
 
-    atomicModifyIORef emTimeoutTable $ \tab ->
-        (TT.insert expTime key cb tab, ())
+    atomicModifyIORef emTimeouts $ \q ->
+        (Q.insert key expTime cb q, ())
     sendWakeup emControl
     return key
 
 clearTimeout :: EventManager -> TimeoutKey -> IO ()
 clearTimeout EventManager{..} key = do
-    atomicModifyIORef emTimeoutTable $ \tab -> (TT.delete key tab, ())
+    atomicModifyIORef emTimeouts $ \q -> (Q.delete key q, ())
     sendWakeup emControl
 
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
 updateTimeout EventManager{..} key ms = do
     now <- getCurrentTime
-    let expTime = addUTCTime (1000 * fromIntegral ms) now
+    let expTime = fromIntegral (1000 * ms) + now
 
-    atomicModifyIORef emTimeoutTable $ \tab -> (TT.update key expTime tab, ())
+    atomicModifyIORef emTimeouts $ \q ->
+        (Q.adjust (const expTime) key q, ())
     sendWakeup emControl
 
 ------------------------------------------------------------------------
@@ -202,21 +187,3 @@ onFdEvent EventManager{..} fd evs = do
     case IM.lookup (fromIntegral fd) cbs of
         Just cb -> cb fd evs
         Nothing -> return ()  -- TODO: error?
-
-onTimeoutEvent :: EventManager -> TimeRep -> IO ()
-onTimeoutEvent EventManager{..} now =
-    sequence_ =<< atomicModifyIORef emTimeoutTable grabExpired
-
-  where
-    grabExpired :: TimeoutTable -> (TimeoutTable, [TimeoutCallback])
-    grabExpired table = go [] table
-
-    go l table =
-        case TT.findOldest table of
-          Nothing      -> (table,l)
-          Just (t,k,c) -> if expired t
-                            then let !table' = TT.delete k table
-                                 in go (c:l) table'
-                            else (table, l)
-
-    expired t = diffUTCTime now t >= 0

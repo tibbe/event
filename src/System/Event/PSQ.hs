@@ -88,6 +88,8 @@ module System.Event.PSQ
     , atMost
     ) where
 
+import System.Event.Unique (Unique)
+
 import Prelude hiding (lookup, null, foldl, foldr)
 import qualified Prelude as P
 
@@ -101,8 +103,8 @@ data Elem a = E
 ------------------------------------------------------------------------
 -- | A mapping from keys @k@ to priorites @p@.
 
-type Prio = Int
-type Key = Int
+type Prio = Double
+type Key = Unique
 
 data PSQ a = Void
            | Winner {-# UNPACK #-} !(Elem a)

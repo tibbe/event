@@ -4,13 +4,23 @@ module System.Event.PSQ.Tests (tests) where
 
 import System.Event.PSQ (Elem(..), PSQ)
 import qualified System.Event.PSQ as Q
+import System.Event.Unique (Unique(..))
 
 import Control.Monad (liftM3)
 import Data.Function (on)
+import Data.Int (Int64)
 import qualified Data.List as L
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.QuickCheck (testProperty)
 import Test.QuickCheck
+
+instance Arbitrary Int64 where
+    arbitrary = fromInteger `fmap` arbitrary
+    coarbitrary = undefined
+
+instance Arbitrary Unique where
+    arbitrary = Unique `fmap` arbitrary
+    coarbitrary = undefined
 
 instance Arbitrary a => Arbitrary (Elem a) where
     arbitrary = liftM3 E arbitrary arbitrary arbitrary
