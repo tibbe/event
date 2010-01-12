@@ -2,8 +2,10 @@
 
 module System.Event.EPoll where
 
-#include <sys/epoll.h>
 #include "EventConfig.h"
+#if defined(HAVE_EPOLL)
+
+#include <sys/epoll.h>
 
 import Control.Monad (liftM2, when)
 import Data.Bits ((.|.), (.&.))
@@ -145,3 +147,5 @@ foreign import ccall unsafe "sys/epoll.h epoll_ctl"
 
 foreign import ccall safe "sys/epoll.h epoll_wait"
     c_epoll_wait :: CInt -> Ptr Event -> CInt -> CInt -> IO CInt
+
+#endif /* defined(HAVE_EPOLL) */

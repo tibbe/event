@@ -20,6 +20,8 @@ module System.Event
       clearTimeout
     ) where
 
+#include "EventConfig.h"
+
 ------------------------------------------------------------------------
 -- Imports
 
@@ -37,9 +39,9 @@ import System.Event.Control
 import qualified System.Event.IntMap as IM
 import System.Event.Unique
 
-#if defined(BACKEND_KQUEUE)
+#if defined(HAVE_KQUEUE)
 import qualified System.Event.KQueue as Backend
-#elif defined(BACKEND_EPOLL)
+#elif defined(HAVE_EPOLL)
 import qualified System.Event.EPoll  as Backend
 #else
 # error not implemented for this operating system

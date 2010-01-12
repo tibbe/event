@@ -2,6 +2,9 @@
 
 module System.Event.KQueue where
 
+#include "EventConfig.h"
+#if defined(HAVE_KQUEUE)
+
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
 import Control.Monad
 import Data.Bits
@@ -22,7 +25,6 @@ import qualified System.Event.Array as A
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
-#include "EventConfig.h"
 
 ------------------------------------------------------------------------
 -- Exported interface
@@ -262,5 +264,7 @@ foreign import ccall safe "sys/event.h kevent"
     c_kevent :: QueueFd -> Ptr Event -> CInt -> Ptr Event -> CInt
              -> Ptr TimeSpec -> IO CInt
 #else
-#error no kevent system call available
+#error no kevent system call available!?
 #endif
+
+#endif /* defined(HAVE_KQUEUE) */

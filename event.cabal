@@ -12,13 +12,12 @@ category:      System
 
 build-type:    Configure
 cabal-version: >= 1.6
+extra-tmp-files:
+  config.log config.status autom4te.cache
+  include/EventConfig.h
 extra-source-files:
   README.md config.guess config.sub install-sh configure.ac configure
-  include/EventConfig.h
-
-flag test
-  description: Build test program.
-  default:     False
+  include/EventConfig.h.in
 
 library
   exposed-modules:
@@ -28,8 +27,10 @@ library
     System.Event.Array
     System.Event.Clock
     System.Event.Control
+    System.Event.EPoll
     System.Event.IntMap
     System.Event.Internal
+    System.Event.KQueue
     System.Event.TimeoutTable
     System.Event.TimeoutTable.Internal
     System.Event.Unique
@@ -41,16 +42,6 @@ library
     ghc-prim,
     time < 1.2,
     unix
-
-  if os(darwin)
-    other-modules:
-      System.Event.KQueue
-    cpp-options: -DBACKEND_KQUEUE
-  else
-    if os(linux)
-      other-modules:
-        System.Event.EPoll
-      cpp-options: -DBACKEND_EPOLL
 
   extensions:
     CPP,
