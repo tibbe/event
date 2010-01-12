@@ -21,3 +21,4 @@ strace.out
 .*.swp
 TAGS
 *.tix
+*.orig
