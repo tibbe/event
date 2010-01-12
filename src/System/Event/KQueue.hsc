@@ -166,7 +166,9 @@ newtype Flag = Flag { unFlag :: Word16 }
  , flagEnable  = EV_ENABLE
  , flagDisable = EV_DISABLE
  , flagDelete  = EV_DELETE
+#if defined(EV_RECEIPT)
  , flagReceipt = EV_RECEIPT
+#endif
  , flagOneShot = EV_ONESHOT
  , flagClear   = EV_CLEAR
  , flagEof     = EV_EOF
