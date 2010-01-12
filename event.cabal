@@ -38,9 +38,7 @@ library
   build-depends:
     array,
     base < 5,
-    containers,
     ghc-prim,
-    time < 1.2,
     unix
 
   extensions:
