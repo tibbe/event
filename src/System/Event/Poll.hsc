@@ -20,22 +20,21 @@ import qualified System.Event.Internal as E
 import System.Posix.Types (Fd(..))
 
 data Poll = Poll {
-      pollChanges :: !(MVar (A.Array PollFd))
-    , pollFd      :: !(A.Array PollFd)
+      pollChanges :: {-# UNPACK #-} !(MVar (A.Array PollFd))
+    , pollFd      :: {-# UNPACK #-} !(A.Array PollFd)
     }
 
 instance E.Backend Poll where
-    new  = new
-    poll = poll
-    set  = set
+    new        = new
+    poll       = poll
+    registerFd = registerFd
 
 new :: IO Poll
 new = liftM2 Poll (newMVar =<< A.empty) A.empty
 
--- TODO: Modify an existing pollfd if one already exists for the given fd.
-set :: Poll -> Fd -> E.Event -> IO ()
-set p fd evt = withMVar (pollChanges p) $ \pfd ->
-                 A.snoc pfd $ PollFd fd (fromEvent evt) 0
+registerFd :: Poll -> Fd -> E.Event -> IO ()
+registerFd p fd evt = withMVar (pollChanges p) $ \pfd ->
+                      A.snoc pfd $ PollFd fd (fromEvent evt) 0
 
 poll :: Poll
      -> E.Timeout
@@ -105,7 +104,7 @@ instance Storable PollFd where
       fd <- #{peek struct pollfd, fd} ptr
       events <- #{peek struct pollfd, events} ptr
       revents <- #{peek struct pollfd, revents} ptr
-      return $ PollFd fd events revents
+      return $! PollFd fd events revents
 
     poke ptr p = do
       #{poke struct pollfd, fd} ptr (pfdFd p)

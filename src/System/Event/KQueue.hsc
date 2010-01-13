@@ -35,15 +35,15 @@ data EventQueue = EventQueue {
     }
 
 instance E.Backend EventQueue where
-    new  = new
-    poll = poll
-    set  = set
+    new        = new
+    poll       = poll
+    registerFd = registerFd
 
 new :: IO EventQueue
 new = liftM3 EventQueue kqueue (newMVar =<< A.empty) (A.new 64)
 
-set :: EventQueue -> Fd -> E.Event -> IO ()
-set q fd evt = withMVar (eqChanges q) $ \ch ->
+registerFd :: EventQueue -> Fd -> E.Event -> IO ()
+registerFd q fd evt = withMVar (eqChanges q) $ \ch ->
     case undefined of
       _ | evt `E.eventIs` E.evtRead  -> addChange ch filterRead
         | evt `E.eventIs` E.evtWrite -> addChange ch filterWrite
@@ -109,8 +109,8 @@ instance Storable Event where
         udata'  <- #{peek struct kevent64_s, udata} ptr
         ext0'   <- #{peek struct kevent64_s, ext[0]} ptr
         ext1'   <- #{peek struct kevent64_s, ext[1]} ptr
-        return $ KEvent64 ident' (Filter filter') (Flag flags') fflags' data'
-                          udata' ext0' ext1'
+        return $! KEvent64 ident' (Filter filter') (Flag flags') fflags' data'
+                           udata' ext0' ext1'
 
     poke ptr ev = do
         #{poke struct kevent64_s, ident} ptr (ident ev)
@@ -145,8 +145,8 @@ instance Storable Event where
         fflags' <- #{peek struct kevent, fflags} ptr
         data'   <- #{peek struct kevent, data} ptr
         udata'  <- #{peek struct kevent, udata} ptr
-        return $ KEvent ident' (Filter filter') (Flag flags') fflags' data'
-                        udata'
+        return $! KEvent ident' (Filter filter') (Flag flags') fflags' data'
+                         udata'
 
     poke ptr ev = do
         #{poke struct kevent, ident} ptr (ident ev)
@@ -202,7 +202,7 @@ instance Storable TimeSpec where
     peek ptr = do
         tv_sec'  <- #{peek struct timespec, tv_sec} ptr
         tv_nsec' <- #{peek struct timespec, tv_nsec} ptr
-        return $ TimeSpec tv_sec' tv_nsec'
+        return $! TimeSpec tv_sec' tv_nsec'
 
     poke ptr ts = do
         #{poke struct timespec, tv_sec} ptr (tv_sec ts)

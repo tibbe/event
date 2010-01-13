@@ -51,6 +51,11 @@ import qualified System.Event.Poll   as Backend
 ------------------------------------------------------------------------
 -- Types
 
+data FdData = FdData {
+      fdEvents   :: {-# UNPACK #-} !Event
+    , fdCallback :: {-# UNPACK #-} !IOCallback
+    }
+
 -- | Callback invoked on I/O events.
 type IOCallback = Fd -> Event -> IO ()
 
@@ -63,7 +68,7 @@ type TimeoutCallback = IO ()
 -- | The event manager state.
 data EventManager = forall a. Backend a => EventManager
     { emBackend      :: !a                     -- ^ Backend
-    , emIOCallbacks  :: !(IORef (IM.IntMap IOCallback))   -- ^ I/O callbacks
+    , emFds          :: !(IORef (IM.IntMap FdData))
     , emTimeouts     :: !(IORef (Q.PSQ TimeoutCallback))  -- ^ Timeouts
     , emKeepRunning  :: !(IORef Bool)
     , emUniqueSource :: !UniqueSource
@@ -90,7 +95,7 @@ new = do
   run <- newIORef True
   us <- newSource
   let mgr = EventManager { emBackend = be
-                         , emIOCallbacks = iocbs
+                         , emFds = iocbs
                          , emTimeouts = timeouts
                          , emKeepRunning = run
                          , emUniqueSource = us
@@ -130,15 +135,16 @@ loop mgr@EventManager{..} = go =<< getCurrentTime
         sequence_ $ map Q.value expired
         case Q.minView q' of
             Nothing             -> return Forever
-            Just (Q.E _ t _, _) -> return $ Timeout $ floor (t - now)
+            Just (Q.E _ t _, _) -> return $! Timeout (floor (t - now))
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
 
 registerFd_ :: EventManager -> IOCallback -> Fd -> Event -> IO ()
 registerFd_ EventManager{..} cb fd evs = do
-  atomicModifyIORef emIOCallbacks $ \c -> (IM.insert (fromIntegral fd) cb c, ())
-  I.set emBackend (fromIntegral fd) evs
+  atomicModifyIORef emFds $ \c ->
+      (IM.insert (fromIntegral fd) (FdData evs cb) c, ())
+  I.registerFd emBackend (fromIntegral fd) evs
 
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
 -- on the file descriptor @fd@.  @cb@ is called for each event that
@@ -182,7 +188,7 @@ updateTimeout EventManager{..} key ms = do
 -- | Call the callback corresponding to the given file descriptor.
 onFdEvent :: EventManager -> Fd -> Event -> IO ()
 onFdEvent EventManager{..} fd evs = do
-    cbs <- readIORef emIOCallbacks
+    cbs <- readIORef emFds
     case IM.lookup (fromIntegral fd) cbs of
-        Just cb -> cb fd evs
-        Nothing -> return ()  -- TODO: error?
+        Just (FdData _ cb) -> cb fd evs
+        Nothing            -> return ()  -- TODO: error?

@@ -68,7 +68,7 @@ class Backend a where
 
     -- | Register interest in the given events on the given file
     -- descriptor.
-    set :: a
-        -> Fd       -- ^ file descriptor
-        -> Event    -- ^ events to watch for
-        -> IO ()
+    registerFd :: a
+               -> Fd       -- ^ file descriptor
+               -> Event    -- ^ events to watch for
+               -> IO ()

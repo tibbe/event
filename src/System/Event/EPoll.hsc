@@ -31,15 +31,15 @@ data EPoll = EPoll {
     }
 
 instance E.Backend EPoll where
-    new    = new
-    set    = set
-    poll   = poll
+    new        = new
+    registerFd = registerFd
+    poll       = poll
 
 new :: IO EPoll
 new = liftM2 EPoll epollCreate (A.new 64)
 
-set :: EPoll -> Fd -> E.Event -> IO ()
-set ep fd events = with e $ epollControl (epollFd ep) controlOpAdd fd
+registerFd :: EPoll -> Fd -> E.Event -> IO ()
+registerFd ep fd events = with e $ epollControl (epollFd ep) controlOpAdd fd
   where e = Event (fromEvent events) fd
 
 poll :: EPoll                        -- ^ state
@@ -77,7 +77,7 @@ instance Storable Event where
     peek ptr = do
         ets <- #{peek struct epoll_event, events} ptr
         ed  <- #{peek struct epoll_event, data.fd}   ptr
-        return $ Event (EventType ets) ed
+        return $! Event (EventType ets) ed
 
     poke ptr e = do
         #{poke struct epoll_event, events} ptr (unEventType $ eventTypes e)
