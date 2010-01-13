@@ -36,10 +36,8 @@ library
     System.Event.Unique
 
   build-depends:
-    array,
     base < 5,
-    ghc-prim,
-    unix
+    ghc-prim
 
   extensions:
     CPP,
