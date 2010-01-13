@@ -35,7 +35,7 @@ data Config = Config {
 
 defaultConfig :: Config
 defaultConfig = Config {
-                  cfgNumPipes    = ljust 1024
+                  cfgNumPipes    = ljust 448
                 , cfgNumMessages = ljust 1024
                 }
 
