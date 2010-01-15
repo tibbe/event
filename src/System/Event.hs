@@ -26,7 +26,7 @@ module System.Event
 -- Imports
 
 import Control.Concurrent (forkIO)
-import Control.Monad (when)
+import Control.Monad (forM_, when)
 import Data.IORef
 import System.Posix.Types (Fd)
 
@@ -68,7 +68,7 @@ type TimeoutCallback = IO ()
 -- | The event manager state.
 data EventManager = forall a. Backend a => EventManager
     { emBackend      :: !a                     -- ^ Backend
-    , emFds          :: !(IORef (IM.IntMap FdData))
+    , emFds          :: !(IORef (IM.IntMap [FdData]))
     , emTimeouts     :: !(IORef (Q.PSQ TimeoutCallback))  -- ^ Timeouts
     , emKeepRunning  :: !(IORef Bool)
     , emUniqueSource :: !UniqueSource
@@ -143,7 +143,7 @@ loop mgr@EventManager{..} = go =<< getCurrentTime
 registerFd_ :: EventManager -> IOCallback -> Fd -> Event -> IO ()
 registerFd_ EventManager{..} cb fd evs = do
   atomicModifyIORef emFds $ \c ->
-      (IM.insert (fromIntegral fd) (FdData evs cb) c, ())
+      (IM.insertWith (++) (fromIntegral fd) [FdData evs cb] c, ())
   I.registerFd emBackend (fromIntegral fd) evs
 
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
@@ -190,5 +190,5 @@ onFdEvent :: EventManager -> Fd -> Event -> IO ()
 onFdEvent EventManager{..} fd evs = do
     cbs <- readIORef emFds
     case IM.lookup (fromIntegral fd) cbs of
-        Just (FdData _ cb) -> cb fd evs
-        Nothing            -> return ()  -- TODO: error?
+        Just cbs -> forM_ cbs $ \(FdData _ cb) -> cb fd evs
+        Nothing  -> return ()  -- TODO: error?
