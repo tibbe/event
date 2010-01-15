@@ -5,8 +5,6 @@
 -- Modelled after:
 -- http://levent.svn.sourceforge.net/viewvc/levent/trunk/libevent/test/bench.c
 
-module Main where
-
 import Args (ljust, parseArgs, positive, theLast)
 import Control.Concurrent (MVar, takeMVar, newEmptyMVar, putMVar)
 import Control.Monad (forM_, replicateM, when)

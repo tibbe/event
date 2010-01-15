@@ -22,3 +22,5 @@ strace.out
 TAGS
 *.tix
 *.orig
+benchmarks/simple
+tests/tests

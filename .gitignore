@@ -19,3 +19,5 @@ Setup.exe*
 Setup
 TAGS
 *.tix
+benchmarks/simple
+tests/tests

@@ -1,5 +1,3 @@
-module Main where
-
 import qualified System.Event.Array.Tests
 import qualified System.Event.PSQ.Tests
 
