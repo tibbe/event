@@ -234,7 +234,7 @@ m1 \\ m2 = difference m1 m2
 --------------------------------------------------------------------}
 -- | A map of integers to values @a@.
 data IntMap a = Nil
-              | Tip {-# UNPACK #-} !Key a
+              | Tip {-# UNPACK #-} !Key !a
               | Bin {-# UNPACK #-} !Prefix {-# UNPACK #-} !Mask !(IntMap a) !(IntMap a) 
 
 type Prefix = Int
