@@ -50,4 +50,4 @@ adjustEveryN step max q0 = go 0 q0
     go :: Int -> PSQ a -> PSQ a
     go n !q
         | n >= max  = q
-        | otherwise = go (n + step) $ Q.adjust (+ 1) n q
+        | otherwise = go (n + step) $ Q.adjust (+ 1) (fromIntegral n) q
