@@ -8,6 +8,7 @@ module System.Event.KQueue where
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
 import Control.Monad
 import Data.Bits
+import Data.Int
 import Data.Word
 import Foreign.C.Error
 import Foreign.C.Types
@@ -33,6 +34,8 @@ data EventQueue = EventQueue {
     , eqChanges  :: {-# UNPACK #-} !(MVar (A.Array Event))
     , eqEvents   :: {-# UNPACK #-} !(A.Array Event)
     }
+
+type Backend = EventQueue
 
 instance E.Backend EventQueue where
     new        = new

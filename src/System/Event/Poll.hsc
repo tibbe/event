@@ -24,6 +24,8 @@ data Poll = Poll {
     , pollFd      :: {-# UNPACK #-} !(A.Array PollFd)
     }
 
+type Backend = Poll
+
 instance E.Backend Poll where
     new        = new
     poll       = poll

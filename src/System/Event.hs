@@ -41,11 +41,11 @@ import qualified System.Event.IntMap as IM
 import System.Event.Unique
 
 #if defined(HAVE_KQUEUE)
-import qualified System.Event.KQueue as Backend
+import qualified System.Event.KQueue as KQueue
 #elif defined(HAVE_EPOLL)
-import qualified System.Event.EPoll  as Backend
+import qualified System.Event.EPoll  as EPoll
 #elif defined(HAVE_POLL)
-import qualified System.Event.Poll   as Backend
+import qualified System.Event.Poll   as Poll
 #else
 # error not implemented for this operating system
 #endif
@@ -88,10 +88,26 @@ handleControlEvent EventManager{..} fd _evt = do
     CMsgWakeup -> return ()
     CMsgDie    -> writeIORef emKeepRunning False
 
+#if defined(HAVE_KQUEUE)
+newDefaultBackend :: IO KQueue.Backend
+newDefaultBackend = KQueue.new
+#elif defined(HAVE_EPOLL)
+newDefaultBackend :: IO EPoll.Backend
+newDefaultBackend = EPoll.new
+#elif defined(HAVE_POLL)
+newDefaultBackend :: IO Poll.Backend
+newDefaultBackend = Poll.new
+#else
+newDefaultBackend :: IO a
+newDefaultBackend = error "no back end for this platform"
+#endif
+
 -- | Create and run a new event manager.
 new :: IO EventManager
-new = do
-  be <- Backend.new
+new = newWith =<< newDefaultBackend
+
+newWith :: I.Backend b => b -> IO EventManager
+newWith be = do
   iocbs <- newIORef IM.empty
   timeouts <- newIORef Q.empty
   ctrl <- newControl
