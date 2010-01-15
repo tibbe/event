@@ -11,6 +11,7 @@ module System.Event.Internal
     ) where
 
 import Data.Bits ((.|.), (.&.))
+import Data.List (foldl')
 import Data.Monoid (Monoid(..))
 import Foreign.C.Types (CInt)
 import System.Posix.Types (Fd)
@@ -41,10 +42,15 @@ instance Show Event where
 instance Monoid Event where
     mempty  = evtNothing
     mappend = evtCombine
+    mconcat = evtConcat
 
 evtCombine :: Event -> Event -> Event
 evtCombine (Event a) (Event b) = Event (a .|. b)
 {-# INLINE evtCombine #-}
+
+evtConcat :: [Event] -> Event
+evtConcat = foldl' evtCombine evtNothing
+{-# INLINE evtConcat #-}
 
 -- | A type alias for timeouts, specified in milliseconds.
 data Timeout = Timeout {-# UNPACK #-} !CInt
