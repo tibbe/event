@@ -171,14 +171,17 @@ insert k p v q = case q of
 -- queue.  When the key is not a member of the queue, the original
 -- queue is returned.
 delete :: Key -> PSQ a -> PSQ a
-delete k q = case tourView q of
-    Null -> empty
-    Single (E k' p v)
+delete k q = case q of
+    Void -> empty
+    Winner (E k' p v) Start _
         | k == k'   -> empty
         | otherwise -> singleton k' p v
-    tl `Play` tr
-        | k <= maxKey tl -> delete k tl `play` tr
-        | otherwise      -> tl `play` delete k tr
+    Winner e (RLoser _ e' tl m tr) m'
+        | k <= m    -> delete k (Winner e tl m) `play` (Winner e' tr m')
+        | otherwise -> (Winner e tl m) `play` delete k (Winner e' tr m')
+    Winner e (LLoser _ e' tl m tr) m'
+        | k <= m    -> delete k (Winner e' tl m) `play` (Winner e tr m')
+        | otherwise -> (Winner e' tl m) `play` delete k (Winner e tr m')
 
 -- | /O(log n)/ Update a priority at a specific key with the result
 -- of the provided function.  When the key is not a member of the
