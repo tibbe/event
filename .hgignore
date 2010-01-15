@@ -10,15 +10,15 @@ config.mk
 config.status
 configure
 dist/*
-*.hi
 .hpc/*
 include/EventConfig.h
 include/EventConfig.h.in
+.*.swp
+*.hi
 *.o
 Setup
 Setup.exe*
 strace.out
-.*.swp
 TAGS
 *.tix
 *.orig

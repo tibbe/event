@@ -15,9 +15,11 @@ include/EventConfig.h.in
 .*.swp
 *.hi
 *.o
-Setup.exe*
 Setup
+Setup.exe*
+strace.out
 TAGS
 *.tix
+*.orig
 benchmarks/simple
 tests/tests
