@@ -11,7 +11,9 @@ module System.Event
       evtRead,
       evtWrite,
       IOCallback,
+      FdRegistration,
       registerFd,
+      unregisterFd,
 
       -- * Registering interest in timeout events
       TimeoutCallback,
@@ -52,7 +54,8 @@ import qualified System.Event.Poll   as Backend
 -- Types
 
 data FdData = FdData {
-      fdEvents   :: {-# UNPACK #-} !Event
+      fdUnique   :: {-# UNPACK #-} !Unique
+    , fdEvents   :: {-# UNPACK #-} !Event
     , fdCallback :: {-# UNPACK #-} !IOCallback
     }
 
@@ -103,9 +106,10 @@ new = do
                          }
       read_fd  = controlReadFd ctrl
       event_fd = controlEventFd ctrl
-  registerFd_ mgr (handleControlEvent mgr) read_fd evtRead
-  when (read_fd /= event_fd) $
-    registerFd_ mgr (handleControlEvent mgr) event_fd evtRead
+  _ <- registerFd_ mgr (handleControlEvent mgr) read_fd evtRead
+  when (read_fd /= event_fd) $ do
+    _ <- registerFd_ mgr (handleControlEvent mgr) event_fd evtRead
+    return ()
   _ <- forkIO $ loop mgr
   return mgr
 
@@ -140,19 +144,43 @@ loop mgr@EventManager{..} = go =<< getCurrentTime
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
 
-registerFd_ :: EventManager -> IOCallback -> Fd -> Event -> IO ()
+-- | A file descriptor registration cookie.
+data FdRegistration = FdRegistration {
+      _regFd     :: {-# UNPACK #-} !Fd
+    , _regUnique :: {-# UNPACK #-} !Unique
+    }
+
+registerFd_ :: EventManager -> IOCallback -> Fd -> Event -> IO FdRegistration
 registerFd_ EventManager{..} cb fd evs = do
+  u <- newUnique emUniqueSource
+  let fd' = fromIntegral fd
   atomicModifyIORef emFds $ \c ->
-      (IM.insertWith (++) (fromIntegral fd) [FdData evs cb] c, ())
-  I.registerFd emBackend (fromIntegral fd) evs
+      (IM.insertWith (++) fd' [FdData u evs cb] c, ())
+  -- TODO: fix up the API to pass the old and new event masks for this
+  -- Fd to the back end
+  I.registerFd emBackend fd evs
+  return $! FdRegistration fd u
 
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
 -- on the file descriptor @fd@.  @cb@ is called for each event that
--- occurs.
-registerFd :: EventManager -> IOCallback -> Fd -> Event -> IO ()
+-- occurs.  Returns a cookie that can be handed to 'unregisterFd'.
+registerFd :: EventManager -> IOCallback -> Fd -> Event -> IO FdRegistration
 registerFd mgr cb fd evs = do
-  registerFd_ mgr cb fd evs
+  r <- registerFd_ mgr cb fd evs
   sendWakeup (emControl mgr)
+  return r
+
+-- | Drop a previous file descriptor registration.
+unregisterFd :: EventManager -> FdRegistration -> IO ()
+unregisterFd mgr (FdRegistration fd u) = do
+  let f cbs = case filter ((/= u) . fdUnique) cbs of
+                []   -> Nothing
+                cbs' -> Just cbs'
+      fd' = fromIntegral fd
+  stillInUse <- atomicModifyIORef (emFds mgr) $ \c -> let c' = IM.update f fd' c
+                                                      in (c', IM.member fd' c')
+  -- TODO: unregister with back end if no longer in use
+  return ()
 
 ------------------------------------------------------------------------
 -- Registering interest in timeout events
@@ -185,10 +213,11 @@ updateTimeout EventManager{..} key ms = do
 ------------------------------------------------------------------------
 -- Utilities
 
--- | Call the callback corresponding to the given file descriptor.
+-- | Call the callbacks corresponding to the given file descriptor.
 onFdEvent :: EventManager -> Fd -> Event -> IO ()
 onFdEvent EventManager{..} fd evs = do
     cbs <- readIORef emFds
     case IM.lookup (fromIntegral fd) cbs of
-        Just cbs -> forM_ cbs $ \(FdData _ cb) -> cb fd evs
+        Just cbs -> forM_ cbs $ \(FdData _ ev cb) ->
+                      when (evs `I.eventIs` ev) $ cb fd evs
         Nothing  -> return ()  -- TODO: error?
