@@ -31,6 +31,7 @@ module System.Event.Manager
 import Control.Concurrent (forkIO)
 import Control.Monad (forM_, when)
 import Data.IORef
+import Data.Monoid (mempty)
 import System.Posix.Types (Fd)
 
 import System.Event.Clock
@@ -177,7 +178,7 @@ registerFd_ EventManager{..} cb fd evs = do
       (IM.insertWith (++) fd' [FdData u evs cb] c, ())
   -- TODO: fix up the API to pass the old and new event masks for this
   -- Fd to the back end
-  I.registerFd emBackend fd evs
+  I.modifyFd emBackend fd mempty evs
   return $! FdRegistration fd u
 
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@

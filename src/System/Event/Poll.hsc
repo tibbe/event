@@ -27,16 +27,16 @@ data Poll = Poll {
 type Backend = Poll
 
 instance E.Backend Poll where
-    new        = new
-    poll       = poll
-    registerFd = registerFd
+    new      = new
+    poll     = poll
+    modifyFd = modifyFd
 
 new :: IO Poll
 new = liftM2 Poll (newMVar =<< A.empty) A.empty
 
-registerFd :: Poll -> Fd -> E.Event -> IO ()
-registerFd p fd evt = withMVar (pollChanges p) $ \pfd ->
-                      A.snoc pfd $ PollFd fd (fromEvent evt) 0
+modifyFd :: Poll -> Fd -> E.Event -> E.Event -> IO ()
+modifyFd p fd _oevt nevt = withMVar (pollChanges p) $ \pfd ->
+                             A.snoc pfd $ PollFd fd (fromEvent nevt) 0
 
 poll :: Poll
      -> E.Timeout

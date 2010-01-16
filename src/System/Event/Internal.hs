@@ -72,9 +72,10 @@ class Backend a where
          -> (Fd -> Event -> IO ())     -- ^ I/O callback
          -> IO Result
 
-    -- | Register interest in the given events on the given file
-    -- descriptor.
-    registerFd :: a
-               -> Fd       -- ^ file descriptor
-               -> Event    -- ^ events to watch for
-               -> IO ()
+    -- | Register, modify, or unregister interest in the given events
+    -- on the given file descriptor.
+    modifyFd :: a
+             -> Fd       -- ^ file descriptor
+             -> Event    -- ^ old events to watch for ('mempty' for new)
+             -> Event    -- ^ new events to watch for ('mempty' to delete)
+             -> IO ()

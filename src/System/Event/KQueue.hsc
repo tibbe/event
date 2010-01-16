@@ -38,19 +38,19 @@ data EventQueue = EventQueue {
 type Backend = EventQueue
 
 instance E.Backend EventQueue where
-    new        = new
-    poll       = poll
-    registerFd = registerFd
+    new      = new
+    poll     = poll
+    modifyFd = modifyFd
 
 new :: IO EventQueue
 new = liftM3 EventQueue kqueue (newMVar =<< A.empty) (A.new 64)
 
-registerFd :: EventQueue -> Fd -> E.Event -> IO ()
-registerFd q fd evt = withMVar (eqChanges q) $ \ch ->
+modifyFd :: EventQueue -> Fd -> E.Event -> E.Event -> IO ()
+modifyFd q fd _oevt nevt = withMVar (eqChanges q) $ \ch ->
     case undefined of
-      _ | evt `E.eventIs` E.evtRead  -> addChange ch filterRead
-        | evt `E.eventIs` E.evtWrite -> addChange ch filterWrite
-        | otherwise                  -> error $ "set: bad event " ++ show evt
+      _ | nevt `E.eventIs` E.evtRead  -> addChange ch filterRead
+        | nevt `E.eventIs` E.evtWrite -> addChange ch filterWrite
+        | otherwise                   -> error $ "set: bad event " ++ show nevt
   where addChange ch filt = A.snoc ch $ event fd filt flagAdd
 
 poll :: EventQueue

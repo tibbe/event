@@ -33,16 +33,16 @@ data EPoll = EPoll {
 type Backend = EPoll
 
 instance E.Backend Backend where
-    new        = new
-    registerFd = registerFd
-    poll       = poll
+    new      = new
+    poll     = poll
+    modifyFd = modifyFd
 
 new :: IO EPoll
 new = liftM2 EPoll epollCreate (A.new 64)
 
-registerFd :: EPoll -> Fd -> E.Event -> IO ()
-registerFd ep fd events = with e $ epollControl (epollFd ep) controlOpAdd fd
-  where e = Event (fromEvent events) fd
+modifyFd :: EPoll -> Fd -> E.Event -> E.Event -> IO ()
+modifyFd ep fd _oevt nevt = with e $ epollControl (epollFd ep) controlOpAdd fd
+  where e = Event (fromEvent nevt) fd
 
 poll :: EPoll                        -- ^ state
      -> Timeout                      -- ^ timeout in milliseconds
