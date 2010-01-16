@@ -70,7 +70,11 @@ newControl = allocaArray 2 $ \fds -> do
   setCloseOnExec wr_end
 #if defined(HAVE_EVENTFD)
   ev <- throwErrnoIfMinus1 "eventfd" $ c_eventfd 0 0
+# if __GLASGOW_HASKELL__ >= 611
+  setNonBlockingFD ev True
+# else
   setNonBlockingFD ev
+# endif
   setCloseOnExec ev
 #endif
   return W { controlReadFd = fromIntegral rd_end
