@@ -15,7 +15,7 @@ readCallback :: MVar () -> IORef Int -> Int -> Fd -> Event -> IO ()
 readCallback done counter count (Fd fd) evt = do
   c <- atomicModifyIORef counter $ \x -> (x+1,x)
   if c == count
-    then putMVar done ()
+    then c_close fd >> putMVar done ()
     else alloca $ \p -> do
       throwErrnoIfMinus1Retry_ "read" $ c_read fd p 1
       print =<< peek p
