@@ -30,7 +30,9 @@ data EPoll = EPoll {
     , epollEvents :: !(A.Array Event)
     }
 
-instance E.Backend EPoll where
+type Backend = EPoll
+
+instance E.Backend Backend where
     new        = new
     registerFd = registerFd
     poll       = poll
