@@ -1,4 +1,5 @@
-{-# LANGUAGE ForeignFunctionInterface, RecordWildCards #-}
+{-# LANGUAGE ForeignFunctionInterface, GeneralizedNewtypeDeriving,
+    RecordWildCards #-}
 
 module System.Event.KQueue where
 
@@ -6,25 +7,31 @@ module System.Event.KQueue where
 #if defined(HAVE_KQUEUE)
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
-import Control.Monad
-import Data.Bits
-import Data.Int
-import Data.Word
-import Foreign.C.Error
-import Foreign.C.Types
-import Foreign.Marshal.Alloc
-import Foreign.Ptr
-import Foreign.Storable
+import Control.Monad (liftM3, when)
+import Data.Bits (Bits(..))
+import Data.Int (Int64)
+import Data.Word (Word16, Word32, Word64)
+import Foreign.C.Error (throwErrnoIfMinus1)
+import Foreign.C.Types (CInt, CLong, CTime, CUInt)
+import Foreign.Marshal.Alloc (alloca)
+import Foreign.Ptr (Ptr, nullPtr)
+import Foreign.Storable (Storable(..))
 import Prelude hiding (filter)
+import System.Event.Internal (Timeout(..))
 import System.Posix.Types (Fd(..))
-
-import qualified System.Event.Internal as E
-import           System.Event.Internal (Timeout(..))
 import qualified System.Event.Array as A
+import qualified System.Event.Internal as E
 
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
+
+-- Handle brokenness on some BSD variants, notably OS X up to at least
+-- 10.6.  If NOTE_EOF isn't available, we have no way to receive a
+-- notification from the kernel when we reach EOF on a plain file.
+#ifndef NOTE_EOF
+# define NOTE_EOF 0
+#endif
 
 ------------------------------------------------------------------------
 -- Exported interface
@@ -51,7 +58,7 @@ modifyFd q fd _oevt nevt = withMVar (eqChanges q) $ \ch ->
       _ | nevt `E.eventIs` E.evtRead  -> addChange ch filterRead
         | nevt `E.eventIs` E.evtWrite -> addChange ch filterWrite
         | otherwise                   -> error $ "set: bad event " ++ show nevt
-  where addChange ch filt = A.snoc ch $ event fd filt flagAdd
+  where addChange ch filt = A.snoc ch $ event fd filt flagAdd noteEOF
 
 poll :: EventQueue
      -> Timeout
@@ -89,15 +96,15 @@ data Event = KEvent64 {
       ident  :: {-# UNPACK #-} !Word64
     , filter :: {-# UNPACK #-} !Filter
     , flags  :: {-# UNPACK #-} !Flag
-    , fflags :: {-# UNPACK #-} !Word32
+    , fflags :: {-# UNPACK #-} !FFlag
     , data_  :: {-# UNPACK #-} !Int64
     , udata  :: {-# UNPACK #-} !Word64
     , ext0   :: {-# UNPACK #-} !Word64
     , ext1   :: {-# UNPACK #-} !Word64
     } deriving Show
 
-event :: Fd -> Filter -> Flag -> Event
-event fd filt flag = KEvent64 (fromIntegral fd) filt flag 0 0 0 0 0
+event :: Fd -> Filter -> Flag -> FFlag -> Event
+event fd filt flag fflag = KEvent64 (fromIntegral fd) filt flag fflag 0 0 0 0
 
 instance Storable Event where
     sizeOf _ = #size struct kevent64_s
@@ -117,8 +124,8 @@ instance Storable Event where
 
     poke ptr ev = do
         #{poke struct kevent64_s, ident} ptr (ident ev)
-        #{poke struct kevent64_s, filter} ptr (unFilter $ filter ev)
-        #{poke struct kevent64_s, flags} ptr (unFlag $ flags ev)
+        #{poke struct kevent64_s, filter} ptr (filter ev)
+        #{poke struct kevent64_s, flags} ptr (flags ev)
         #{poke struct kevent64_s, fflags} ptr (fflags ev)
         #{poke struct kevent64_s, data} ptr (data_ ev)
         #{poke struct kevent64_s, udata} ptr (udata ev)
@@ -129,13 +136,13 @@ data Event = KEvent {
       ident  :: {-# UNPACK #-} !CUIntPtr
     , filter :: {-# UNPACK #-} !Filter
     , flags  :: {-# UNPACK #-} !Flag
-    , fflags :: {-# UNPACK #-} !Word32
+    , fflags :: {-# UNPACK #-} !FFlag
     , data_  :: {-# UNPACK #-} !CIntPtr
     , udata  :: {-# UNPACK #-} !(Ptr ())
     } deriving Show
 
-event :: Fd -> Filter -> Flag -> Event
-event fd filt flag = KEvent (fromIntegral fd) filt flag 0 0 nullPtr
+event :: Fd -> Filter -> Flag -> FFlag -> Event
+event fd filt flag fflag = KEvent (fromIntegral fd) filt flag fflag 0 nullPtr
 
 instance Storable Event where
     sizeOf _ = #size struct kevent
@@ -153,15 +160,22 @@ instance Storable Event where
 
     poke ptr ev = do
         #{poke struct kevent, ident} ptr (ident ev)
-        #{poke struct kevent, filter} ptr (unFilter $ filter ev)
-        #{poke struct kevent, flags} ptr (unFlag $ flags ev)
+        #{poke struct kevent, filter} ptr (filter ev)
+        #{poke struct kevent, flags} ptr (flags ev)
         #{poke struct kevent, fflags} ptr (fflags ev)
         #{poke struct kevent, data} ptr (data_ ev)
         #{poke struct kevent, udata} ptr (udata ev)
 #endif
 
-newtype Flag = Flag { unFlag :: Word16 }
-    deriving (Eq, Show)
+newtype FFlag = FFlag Word32
+    deriving (Eq, Show, Storable)
+
+#{enum FFlag, FFlag
+ , noteEOF = NOTE_EOF
+ }
+
+newtype Flag = Flag Word16
+    deriving (Eq, Show, Storable)
 
 #{enum Flag, Flag
  , flagAdd     = EV_ADD
@@ -177,8 +191,8 @@ newtype Flag = Flag { unFlag :: Word16 }
  , flagError   = EV_ERROR
  }
 
-newtype Filter = Filter { unFilter :: CShort }
-    deriving (Eq, Show)
+newtype Filter = Filter Word16
+    deriving (Bits, Eq, Num, Show, Storable)
 
 #{enum Filter, Filter
  , filterRead   = EVFILT_READ
@@ -189,9 +203,6 @@ newtype Filter = Filter { unFilter :: CShort }
  , filterSignal = EVFILT_SIGNAL
  , filterTimer  = EVFILT_TIMER
  }
-
-combineFilters :: [Filter] -> Filter
-combineFilters = Filter . foldr ((.|.) . unFilter) 0
 
 data TimeSpec = TimeSpec {
       tv_sec  :: {-# UNPACK #-} !CTime
@@ -244,8 +255,8 @@ msToTimeSpec (Timeout ms) = TimeSpec (toEnum sec) (toEnum nanosec)
     nanosec = (fromEnum ms - 1000*sec) * 1000000
 
 fromEvent :: E.Event -> Filter
-fromEvent e = Filter (remap E.evtRead (#const EVFILT_READ) .|.
-                      remap E.evtWrite (#const EVFILT_WRITE))
+fromEvent e = remap E.evtRead filterRead .|.
+              remap E.evtWrite filterWrite
   where remap evt to
             | e `E.eventIs` evt = to
             | otherwise         = 0
