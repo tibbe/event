@@ -26,6 +26,7 @@ module System.Event.Manager
 
       -- * Registering interest in timeout events
     , TimeoutCallback
+    , TimeoutKey
     , registerTimeout
     , updateTimeout
     , clearTimeout
@@ -81,9 +82,9 @@ type TimeoutCallback = IO ()
 
 -- | The event manager state.
 data EventManager = forall a. Backend a => EventManager
-    { emBackend      :: !a                     -- ^ Backend
+    { emBackend      :: !a
     , emFds          :: !(IORef (IM.IntMap [FdData]))
-    , emTimeouts     :: !(IORef (Q.PSQ TimeoutCallback))  -- ^ Timeouts
+    , emTimeouts     :: !(IORef (Q.PSQ TimeoutCallback))
     , emKeepRunning  :: !(IORef Bool)
     , emUniqueSource :: !UniqueSource
     , emControl      :: !Control

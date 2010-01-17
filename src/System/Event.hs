@@ -20,6 +20,7 @@ module System.Event
 
       -- * Registering interest in timeout events
     , TimeoutCallback
+    , TimeoutKey
     , registerTimeout
     , updateTimeout
     , clearTimeout
