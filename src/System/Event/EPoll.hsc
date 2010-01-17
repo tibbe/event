@@ -41,8 +41,10 @@ new :: IO EPoll
 new = liftM2 EPoll epollCreate (A.new 64)
 
 modifyFd :: EPoll -> Fd -> E.Event -> E.Event -> IO ()
-modifyFd ep fd _oevt nevt = with e $ epollControl (epollFd ep) controlOpAdd fd
-  where e = Event (fromEvent nevt) fd
+modifyFd ep fd oevt nevt = with (Event (fromEvent nevt) fd) $
+                           epollControl (epollFd ep) op fd
+  where op | oevt == mempty = controlOpAdd
+           | otherwise      = controlOpModify
 
 poll :: EPoll                        -- ^ state
      -> Timeout                      -- ^ timeout in milliseconds
