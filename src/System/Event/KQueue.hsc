@@ -9,10 +9,9 @@ module System.Event.KQueue where
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
 import Control.Monad (liftM3, when)
 import Data.Bits (Bits(..))
-import Data.Int (Int64)
-import Data.Word (Word16, Word32, Word64)
+import Data.Word (Word16, Word32)
 import Foreign.C.Error (throwErrnoIfMinus1)
-import Foreign.C.Types (CInt, CLong, CTime, CUInt)
+import Foreign.C.Types (CInt, CIntPtr, CLong, CTime, CUIntPtr)
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr, nullPtr)
 import Foreign.Storable (Storable(..))
@@ -21,6 +20,12 @@ import System.Event.Internal (Timeout(..))
 import System.Posix.Types (Fd(..))
 import qualified System.Event.Array as A
 import qualified System.Event.Internal as E
+
+#if defined(HAVE_KEVENT64)
+import Data.Int (Int64)
+import Data.Word (Word64)
+import Foreign.C.Types (CUInt)
+#endif
 
 #include <sys/types.h>
 #include <sys/event.h>
