@@ -7,12 +7,17 @@ module System.Event.Manager
       new,
       newWith,
 
+      -- * Running
+      loop,
+      wakeManager,
+
       -- * Registering interest in I/O events
       Event,
       evtRead,
       evtWrite,
       IOCallback,
       FdRegistration,
+      registerFd_,
       registerFd,
       unregisterFd,
 
@@ -28,7 +33,6 @@ module System.Event.Manager
 ------------------------------------------------------------------------
 -- Imports
 
-import Control.Concurrent (forkIO)
 import Control.Monad (forM_, when)
 import Data.IORef
 import Data.Monoid (mempty)
@@ -86,11 +90,11 @@ data EventManager = forall a. Backend a => EventManager
 -- Creation
 
 handleControlEvent :: EventManager -> Fd -> Event -> IO ()
-handleControlEvent EventManager{..} fd _evt = do
-  msg <- readControlMessage emControl fd
+handleControlEvent mgr fd _evt = do
+  msg <- readControlMessage (emControl mgr) fd
   case msg of
     CMsgWakeup -> return ()
-    CMsgDie    -> writeIORef emKeepRunning False
+    CMsgDie    -> writeIORef (emKeepRunning mgr) False
 
 #if defined(HAVE_KQUEUE)
 newDefaultBackend :: IO KQueue.Backend
@@ -106,7 +110,7 @@ newDefaultBackend :: IO a
 newDefaultBackend = error "no back end for this platform"
 #endif
 
--- | Create and run a new event manager.
+-- | Create a new event manager.
 new :: IO EventManager
 new = newWith =<< newDefaultBackend
 
@@ -130,13 +134,12 @@ newWith be = do
   when (read_fd /= event_fd) $ do
     _ <- registerFd_ mgr (handleControlEvent mgr) event_fd evtRead
     return ()
-  _ <- forkIO $ loop mgr
   return mgr
 
 ------------------------------------------------------------------------
 -- Event loop
 
--- | Start handling events.  This function returns when told to.
+-- | Start handling events.  This function loops until told to stop.
 loop :: EventManager -> IO ()
 loop mgr@EventManager{..} = go =<< getCurrentTime
   where
@@ -170,6 +173,8 @@ data FdRegistration = FdRegistration {
     , _regUnique :: {-# UNPACK #-} !Unique
     }
 
+-- | Register interest in the given events, without waking the event
+-- manager thread.
 registerFd_ :: EventManager -> IOCallback -> Fd -> Event -> IO FdRegistration
 registerFd_ EventManager{..} cb fd evs = do
   u <- newUnique emUniqueSource
@@ -187,8 +192,12 @@ registerFd_ EventManager{..} cb fd evs = do
 registerFd :: EventManager -> IOCallback -> Fd -> Event -> IO FdRegistration
 registerFd mgr cb fd evs = do
   r <- registerFd_ mgr cb fd evs
-  sendWakeup (emControl mgr)
+  wakeManager mgr
   return r
+
+-- | Wake up the event manager.
+wakeManager :: EventManager -> IO ()
+wakeManager mgr = sendWakeup (emControl mgr)
 
 -- | Drop a previous file descriptor registration.
 unregisterFd :: EventManager -> FdRegistration -> IO ()
@@ -206,38 +215,38 @@ unregisterFd mgr (FdRegistration fd u) = do
 -- Registering interest in timeout events
 
 registerTimeout :: EventManager -> Int -> TimeoutCallback -> IO TimeoutKey
-registerTimeout EventManager{..} ms cb = do
+registerTimeout mgr ms cb = do
     now <- getCurrentTime
     let expTime = fromIntegral (1000 * ms) + now
-    key <- newUnique emUniqueSource
+    key <- newUnique (emUniqueSource mgr)
 
-    atomicModifyIORef emTimeouts $ \q ->
+    atomicModifyIORef (emTimeouts mgr) $ \q ->
         (Q.insert key expTime cb q, ())
-    sendWakeup emControl
+    wakeManager mgr
     return key
 
 clearTimeout :: EventManager -> TimeoutKey -> IO ()
-clearTimeout EventManager{..} key = do
-    atomicModifyIORef emTimeouts $ \q -> (Q.delete key q, ())
-    sendWakeup emControl
+clearTimeout mgr key = do
+    atomicModifyIORef (emTimeouts mgr) $ \q -> (Q.delete key q, ())
+    wakeManager mgr
 
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
-updateTimeout EventManager{..} key ms = do
+updateTimeout mgr key ms = do
     now <- getCurrentTime
     let expTime = fromIntegral (1000 * ms) + now
 
-    atomicModifyIORef emTimeouts $ \q ->
+    atomicModifyIORef (emTimeouts mgr) $ \q ->
         (Q.adjust (const expTime) key q, ())
-    sendWakeup emControl
+    wakeManager mgr
 
 ------------------------------------------------------------------------
 -- Utilities
 
 -- | Call the callbacks corresponding to the given file descriptor.
 onFdEvent :: EventManager -> Fd -> Event -> IO ()
-onFdEvent EventManager{..} fd evs = do
-    cbs <- readIORef emFds
-    case IM.lookup (fromIntegral fd) cbs of
+onFdEvent mgr fd evs = do
+    fds <- readIORef (emFds mgr)
+    case IM.lookup (fromIntegral fd) fds of
         Just cbs -> forM_ cbs $ \(FdData _ ev cb) ->
                       when (evs `I.eventIs` ev) $ cb fd evs
         Nothing  -> return ()  -- TODO: error?
