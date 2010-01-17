@@ -19,7 +19,9 @@ module System.Event.Manager
       FdRegistration,
       registerFd_,
       registerFd,
+      unregisterFd_,
       unregisterFd,
+      fdWasClosed,
 
       -- * Registering interest in timeout events
       TimeoutCallback,
@@ -35,7 +37,7 @@ module System.Event.Manager
 
 import Control.Monad (forM_, when)
 import Data.IORef
-import Data.Monoid (mempty)
+import Data.Monoid (mconcat, mempty)
 import System.Posix.Types (Fd)
 
 import System.Event.Clock
@@ -171,45 +173,77 @@ loop mgr@EventManager{..} = go =<< getCurrentTime
 data FdRegistration = FdRegistration {
       _regFd     :: {-# UNPACK #-} !Fd
     , _regUnique :: {-# UNPACK #-} !Unique
-    }
+    } deriving (Eq, Ord)
 
 -- | Register interest in the given events, without waking the event
--- manager thread.
-registerFd_ :: EventManager -> IOCallback -> Fd -> Event -> IO FdRegistration
+-- manager thread.  The 'Bool' return value indicates whether the
+-- event manager needs to be woken.
+registerFd_ :: EventManager -> IOCallback -> Fd -> Event
+            -> IO (FdRegistration, Bool)
 registerFd_ EventManager{..} cb fd evs = do
   u <- newUnique emUniqueSource
   let fd' = fromIntegral fd
-  atomicModifyIORef emFds $ \c ->
-      (IM.insertWith (++) fd' [FdData u evs cb] c, ())
-  -- TODO: fix up the API to pass the old and new event masks for this
-  -- Fd to the back end
-  I.modifyFd emBackend fd mempty evs
-  return $! FdRegistration fd u
+  (oldEvs, newEvs) <- atomicModifyIORef emFds $ \f ->
+    case IM.insertLookupWithKey (const (++)) fd' [FdData u evs cb] f of
+      (Nothing,   newMap) -> (newMap, (mempty, evs))
+      (Just prev, newMap) -> (newMap, pairEvents prev newMap fd')
+  let modify = oldEvs /= newEvs
+  when modify $ I.modifyFd emBackend fd oldEvs newEvs
+  let !reg = FdRegistration fd u
+  return (reg, modify)
 
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
 -- on the file descriptor @fd@.  @cb@ is called for each event that
 -- occurs.  Returns a cookie that can be handed to 'unregisterFd'.
 registerFd :: EventManager -> IOCallback -> Fd -> Event -> IO FdRegistration
 registerFd mgr cb fd evs = do
-  r <- registerFd_ mgr cb fd evs
-  wakeManager mgr
+  (r, wake) <- registerFd_ mgr cb fd evs
+  when wake $ wakeManager mgr
   return r
 
 -- | Wake up the event manager.
 wakeManager :: EventManager -> IO ()
 wakeManager mgr = sendWakeup (emControl mgr)
 
+eventsOf :: [FdData] -> Event
+eventsOf = mconcat . map fdEvents
+
+pairEvents :: [FdData] -> IM.IntMap [FdData] -> Int -> (Event, Event)
+pairEvents prev m fd = (eventsOf prev, case IM.lookup fd m of
+                                         Nothing  -> mempty
+                                         Just fds -> eventsOf fds)
+
+-- | Drop a previous file descriptor registration, without waking the
+-- event manager thread.  The return value indicates whether the event
+-- manager needs to be woken.
+unregisterFd_ :: EventManager -> FdRegistration -> IO Bool
+unregisterFd_ mgr@EventManager{..} (FdRegistration fd u) = do
+  let dropReg _ cbs = case filter ((/= u) . fdUnique) cbs of
+                        []   -> Nothing
+                        cbs' -> Just cbs'
+      fd' = fromIntegral fd
+  (oldEvs, newEvs) <- atomicModifyIORef emFds $ \f ->
+    case IM.updateLookupWithKey dropReg fd' f of
+      (Nothing,   _)      -> (f,      (mempty, mempty))
+      (Just prev, newMap) -> (newMap, pairEvents prev newMap fd')
+  let modify = oldEvs /= newEvs
+  when modify $ I.modifyFd emBackend fd oldEvs newEvs
+  return $! modify
+
 -- | Drop a previous file descriptor registration.
 unregisterFd :: EventManager -> FdRegistration -> IO ()
-unregisterFd mgr (FdRegistration fd u) = do
-  let f cbs = case filter ((/= u) . fdUnique) cbs of
-                []   -> Nothing
-                cbs' -> Just cbs'
-      fd' = fromIntegral fd
-  stillInUse <- atomicModifyIORef (emFds mgr) $ \c -> let c' = IM.update f fd' c
-                                                      in (c', IM.member fd' c')
-  -- TODO: unregister with back end if no longer in use
-  return ()
+unregisterFd mgr reg = do
+  wake <- unregisterFd_ mgr reg
+  when wake $ wakeManager mgr
+
+-- | Notify the event manager that a file descriptor has been closed.
+fdWasClosed :: EventManager -> Fd -> IO ()
+fdWasClosed mgr fd = do
+  oldEvs <- atomicModifyIORef (emFds mgr) $ \f ->
+    case IM.updateLookupWithKey (\ _ _ -> Nothing) (fromIntegral fd) f of
+      (Nothing,  _)      -> (f,      mempty)
+      (Just fds, newMap) -> (newMap, eventsOf fds)
+  when (oldEvs /= mempty) $ wakeManager mgr
 
 ------------------------------------------------------------------------
 -- Registering interest in timeout events
@@ -249,4 +283,4 @@ onFdEvent mgr fd evs = do
     case IM.lookup (fromIntegral fd) fds of
         Just cbs -> forM_ cbs $ \(FdData _ ev cb) ->
                       when (evs `I.eventIs` ev) $ cb fd evs
-        Nothing  -> return ()  -- TODO: error?
+        Nothing  -> return ()
