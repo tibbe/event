@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving #-}
 module System.Event.Unique
     (
       UniqueSource
@@ -13,7 +13,7 @@ import Data.Int (Int64)
 newtype UniqueSource = US (IORef Int64)
 
 newtype Unique = Unique { asInt64 :: Int64 }
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Num, Show)
 
 newSource :: IO UniqueSource
 newSource = US `fmap` newIORef 0

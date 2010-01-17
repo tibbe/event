@@ -44,9 +44,9 @@ You might want to use `git rebase` to make sure your commits
 correspond to nice, logical commits.  Make sure whitespace only
 changes are kept in separate commits to ease reviewing.
 
-Prepare the e.g. last five patches for sending:
+Prepare your patches for sending:
 
-    git format-patch -5 -n
+    git format-patch -n origin
 
 This will create one patch file per patch.
 
@@ -60,10 +60,9 @@ into nice, logical commits and resend the patches.
 Running the tests
 -----------------
 
-You can run all unit tests by first building the "test" executable and
-then running `cabal test`:
+You can run all unit tests by running:
 
-    cabal clean && cabal configure -ftest && cabal build && cabal test
+    cabal configure && cabal build && cd tests && make tests
 
 References
 ----------
