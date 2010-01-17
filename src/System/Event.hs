@@ -5,6 +5,9 @@ module System.Event
       -- * Creation
       new,
 
+      -- * Running
+      loop,
+
       -- * Registering interest in I/O events
       Event,
       evtRead,
