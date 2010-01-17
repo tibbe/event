@@ -19,6 +19,7 @@ module System.Event.Manager
     , FdRegistration
     , registerFd_
     , registerFd
+    , unregisterFd__
     , unregisterFd_
     , unregisterFd
     , fdWasClosed
@@ -213,19 +214,26 @@ pairEvents prev m fd = (eventsOf prev, case IM.lookup fd m of
                                          Nothing  -> mempty
                                          Just fds -> eventsOf fds)
 
--- | Drop a previous file descriptor registration, without waking the
--- event manager thread.  The return value indicates whether the event
--- manager needs to be woken.
-unregisterFd_ :: EventManager -> FdRegistration -> IO Bool
-unregisterFd_ mgr@EventManager{..} (FdRegistration fd u) = do
+-- | Drop a previous file descriptor registration, without modifying
+-- the event manager's back end.  The return value contains the old
+-- and new values of the events watched for this file descriptor.
+unregisterFd__ :: EventManager -> FdRegistration -> IO (Event, Event)
+unregisterFd__ mgr (FdRegistration fd u) = do
   let dropReg _ cbs = case filter ((/= u) . fdUnique) cbs of
                         []   -> Nothing
                         cbs' -> Just cbs'
       fd' = fromIntegral fd
-  (oldEvs, newEvs) <- atomicModifyIORef emFds $ \f ->
+  atomicModifyIORef (emFds mgr) $ \f ->
     case IM.updateLookupWithKey dropReg fd' f of
       (Nothing,   _)      -> (f,      (mempty, mempty))
       (Just prev, newMap) -> (newMap, pairEvents prev newMap fd')
+
+-- | Drop a previous file descriptor registration, without waking the
+-- event manager thread.  The return value indicates whether the event
+-- manager needs to be woken.
+unregisterFd_ :: EventManager -> FdRegistration -> IO Bool
+unregisterFd_ mgr@EventManager{..} reg@(FdRegistration fd _) = do
+  (oldEvs, newEvs) <- unregisterFd__ mgr reg
   let modify = oldEvs /= newEvs
   when modify $ I.modifyFd emBackend fd oldEvs newEvs
   return $! modify
