@@ -165,7 +165,8 @@ loop mgr@EventManager{..} = go =<< getCurrentTime
         sequence_ $ map Q.value expired
         case Q.minView q' of
             Nothing             -> return Forever
-            Just (Q.E _ t _, _) -> return $! Timeout (floor (t - now))
+            Just (Q.E _ t _, _) ->
+                return $! Timeout (ceiling $ (t - now) * 1000)
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
@@ -256,10 +257,11 @@ fdWasClosed mgr fd = do
 ------------------------------------------------------------------------
 -- Registering interest in timeout events
 
+-- | Register a timeout in the given number of milliseconds.
 registerTimeout :: EventManager -> Int -> TimeoutCallback -> IO TimeoutKey
 registerTimeout mgr ms cb = do
     now <- getCurrentTime
-    let expTime = fromIntegral (1000 * ms) + now
+    let expTime = fromIntegral ms / 1000.0 + now
     key <- newUnique (emUniqueSource mgr)
 
     atomicModifyIORef (emTimeouts mgr) $ \q ->
@@ -275,7 +277,7 @@ clearTimeout mgr key = do
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
 updateTimeout mgr key ms = do
     now <- getCurrentTime
-    let expTime = fromIntegral (1000 * ms) + now
+    let expTime = fromIntegral ms / 1000.0 + now
 
     atomicModifyIORef (emTimeouts mgr) $ \q ->
         (Q.adjust (const expTime) key q, ())

@@ -16,7 +16,7 @@ getCurrentTime = do
     tv <- with (CTimeval 0 0) $ \tvptr -> do
         throwErrnoIfMinus1_ "gettimeofday" (gettimeofday tvptr nullPtr)
         peek tvptr
-    return $! fromIntegral (sec tv + 1000000 * usec tv)
+    return $! fromIntegral (sec tv) + fromIntegral (usec tv) / 1000000.0
 
 ------------------------------------------------------------------------
 -- FFI binding
