@@ -100,6 +100,7 @@ newtype EventType = EventType {
 #{enum EventType, EventType
  , epollIn  = EPOLLIN
  , epollOut = EPOLLOUT
+ , epollErr = EPOLLERR
  , epollHup = EPOLLHUP
  }
 
@@ -132,8 +133,8 @@ fromEvent e = remap E.evtRead  epollIn .|.
             | otherwise         = 0
 
 toEvent :: EventType -> E.Event
-toEvent e = remap (epollIn  .|. epollHup) E.evtRead `mappend`
-            remap (epollOut .|. epollHup) E.evtWrite
+toEvent e = remap (epollIn  .|. epollErr .|. epollHup) E.evtRead `mappend`
+            remap (epollOut .|. epollErr .|. epollHup) E.evtWrite
   where remap evt to
             | e .&. evt /= 0 = to
             | otherwise      = mempty
