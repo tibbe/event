@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE ForeignFunctionInterface, GeneralizedNewtypeDeriving #-}
 
 module System.Event.EPoll where
 
@@ -8,7 +8,7 @@ module System.Event.EPoll where
 #include <sys/epoll.h>
 
 import Control.Monad (liftM2, when)
-import Data.Bits ((.|.), (.&.))
+import Data.Bits (Bits, (.|.), (.&.))
 import Data.Monoid (Monoid(..))
 import Data.Word (Word32)
 import Foreign.C.Error (throwErrnoIfMinus1, throwErrnoIfMinus1_)
@@ -95,7 +95,13 @@ newtype ControlOp = ControlOp CInt
 
 newtype EventType = EventType {
       unEventType :: Word32
-    } deriving (Show)
+    } deriving (Show, Eq, Num, Bits)
+
+#{enum EventType, EventType
+ , epollIn  = EPOLLIN
+ , epollOut = EPOLLOUT
+ , epollHup = EPOLLHUP
+ }
 
 epollCreate :: IO EPollFd
 epollCreate = do
@@ -119,15 +125,15 @@ epollWait (EPollFd epfd) events numEvents timeout =
     c_epoll_wait epfd events (fromIntegral numEvents) (fromIntegral timeout)
 
 fromEvent :: E.Event -> EventType
-fromEvent e = EventType (remap E.evtRead (#const EPOLLIN) .|.
-                         remap E.evtWrite (#const EPOLLOUT))
+fromEvent e = remap E.evtRead  epollIn .|.
+              remap E.evtWrite epollOut
   where remap evt to
             | e `E.eventIs` evt = to
             | otherwise         = 0
 
 toEvent :: EventType -> E.Event
-toEvent (EventType e) = remap (#const EPOLLIN) E.evtRead `mappend`
-                        remap (#const EPOLLOUT) E.evtWrite
+toEvent e = remap (epollIn  .|. epollHup) E.evtRead `mappend`
+            remap (epollOut .|. epollHup) E.evtWrite
   where remap evt to
             | e .&. evt /= 0 = to
             | otherwise      = mempty
