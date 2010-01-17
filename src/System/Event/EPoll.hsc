@@ -32,7 +32,7 @@ data EPoll = EPoll {
 
 type Backend = EPoll
 
-instance E.Backend Backend where
+instance E.Backend EPoll where
     new      = new
     poll     = poll
     modifyFd = modifyFd

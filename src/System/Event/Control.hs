@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, ScopedTypeVariables #-}
 
 module System.Event.Control
     (
