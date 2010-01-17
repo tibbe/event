@@ -1,28 +1,28 @@
 module System.Event
     ( -- * Types
-      EventManager,
+      EventManager
 
       -- * Creation
-      new,
+    , new
 
       -- * Running
-      loop,
+    , loop
 
       -- * Registering interest in I/O events
-      Event,
-      evtRead,
-      evtWrite,
-      IOCallback,
-      FdRegistration,
-      registerFd,
-      unregisterFd,
-      fdWasClosed,
+    , Event
+    , evtRead
+    , evtWrite
+    , IOCallback
+    , FdRegistration
+    , registerFd
+    , unregisterFd
+    , fdWasClosed
 
       -- * Registering interest in timeout events
-      TimeoutCallback,
-      registerTimeout,
-      updateTimeout,
-      clearTimeout
+    , TimeoutCallback
+    , registerTimeout
+    , updateTimeout
+    , clearTimeout
     ) where
 
 import System.Event.Manager

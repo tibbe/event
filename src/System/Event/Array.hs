@@ -1,23 +1,24 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
 
 module System.Event.Array
-    ( Array,
-      empty,
-      new,
-      duplicate,
-      length,
-      capacity,
-      unsafeRead,
-      unsafeWrite,
-      unsafeLoad,
-      ensureCapacity,
-      useAsPtr,
-      snoc,
-      clear,
-      forM_,
-      loop,
-      concat,
-      copy
+    (
+      Array
+    , capacity
+    , clear
+    , concat
+    , copy
+    , duplicate
+    , empty
+    , ensureCapacity
+    , forM_
+    , length
+    , loop
+    , new
+    , snoc
+    , unsafeLoad
+    , unsafeRead
+    , unsafeWrite
+    , useAsPtr
     ) where
 
 import Control.Monad (when)

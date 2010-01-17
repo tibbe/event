@@ -1,33 +1,33 @@
 {-# LANGUAGE BangPatterns, CPP, ExistentialQuantification, RecordWildCards #-}
 module System.Event.Manager
     ( -- * Types
-      EventManager,
+      EventManager
 
       -- * Creation
-      new,
-      newWith,
+    , new
+    , newWith
 
       -- * Running
-      loop,
-      wakeManager,
+    , loop
+    , wakeManager
 
       -- * Registering interest in I/O events
-      Event,
-      evtRead,
-      evtWrite,
-      IOCallback,
-      FdRegistration,
-      registerFd_,
-      registerFd,
-      unregisterFd_,
-      unregisterFd,
-      fdWasClosed,
+    , Event
+    , evtRead
+    , evtWrite
+    , IOCallback
+    , FdRegistration
+    , registerFd_
+    , registerFd
+    , unregisterFd_
+    , unregisterFd
+    , fdWasClosed
 
       -- * Registering interest in timeout events
-      TimeoutCallback,
-      registerTimeout,
-      updateTimeout,
-      clearTimeout
+    , TimeoutCallback
+    , registerTimeout
+    , updateTimeout
+    , clearTimeout
     ) where
 
 #include "EventConfig.h"
