@@ -26,9 +26,11 @@ evtNothing = Event 0
 
 evtRead :: Event
 evtRead = Event 1
+{-# INLINE evtRead #-}
 
 evtWrite :: Event
 evtWrite = Event 2
+{-# INLINE evtWrite #-}
 
 eventIs :: Event -> Event -> Bool
 eventIs (Event a) (Event b) = a .&. b /= 0

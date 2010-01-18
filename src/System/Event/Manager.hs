@@ -194,6 +194,7 @@ registerFd_ EventManager{..} cb fd evs = do
   when modify $ I.modifyFd emBackend fd oldEvs newEvs
   let !reg = FdRegistration fd u
   return (reg, modify)
+{-# INLINE registerFd_ #-}
 
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
 -- on the file descriptor @fd@.  @cb@ is called for each event that
@@ -203,6 +204,7 @@ registerFd mgr cb fd evs = do
   (r, wake) <- registerFd_ mgr cb fd evs
   when wake $ wakeManager mgr
   return r
+{-# INLINE registerFd #-}
 
 -- | Wake up the event manager.
 wakeManager :: EventManager -> IO ()

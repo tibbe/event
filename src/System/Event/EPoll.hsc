@@ -1,5 +1,14 @@
 {-# LANGUAGE ForeignFunctionInterface, GeneralizedNewtypeDeriving #-}
 
+--
+-- | A binding to the epoll I/O event notification facility
+--
+-- epoll is a variant of poll that can be used either as an edge-triggered or
+-- a level-triggered interface and scales well to large numbers of watched file
+-- descriptors.
+-- 
+-- epoll decouples monitor an fd from the process of registering it.
+--
 module System.Event.EPoll where
 
 #include "EventConfig.h"
@@ -37,6 +46,7 @@ instance E.Backend EPoll where
     poll     = poll
     modifyFd = modifyFd
 
+-- | Create a new epoll backend.
 new :: IO EPoll
 new = liftM2 EPoll epollCreate (A.new 64)
 
@@ -106,6 +116,14 @@ newtype EventType = EventType {
  , epollHup = EPOLLHUP
  }
 
+-- | Create a new epoll context, returning a file descriptor associated with the context.
+-- The fd may be used for subsequent calls to this epoll context.
+--
+-- The size parameter to epoll_create is a hint about the expected number of handles.
+--
+-- The file descriptor returned from epoll_create() should be destroyed via
+-- a call to close() after polling is finished
+-- 
 epollCreate :: IO EPollFd
 epollCreate = do
   fd <- throwErrnoIfMinus1 "epollCreate" $
