@@ -23,4 +23,5 @@ TAGS
 *.tix
 *.orig
 benchmarks/simple
+benchmarks/timers
 tests/tests
