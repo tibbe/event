@@ -2,8 +2,15 @@ ghc-opt-flags = -O2
 
 include ../tests/common.mk
 
+ghc-bench-flags := -package network
+
 .PHONY: all
-all: simple timers
+all: pong simple timers
+
+pong: ghc-flags += $(ghc-bench-flags)
+pong: $(lib) EventSocket.o PongServer.o
+	ranlib $(lib)
+	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
 simple: $(lib) Args.o Simple.o
 	ranlib $(lib)
