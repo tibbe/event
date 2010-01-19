@@ -214,9 +214,11 @@ eventsOf :: [FdData] -> Event
 eventsOf = mconcat . map fdEvents
 
 pairEvents :: [FdData] -> IM.IntMap [FdData] -> Int -> (Event, Event)
-pairEvents prev m fd = (eventsOf prev, case IM.lookup fd m of
-                                         Nothing  -> mempty
-                                         Just fds -> eventsOf fds)
+pairEvents prev m fd = let !l = eventsOf prev
+                           !r = case IM.lookup fd m of
+                                  Nothing  -> mempty
+                                  Just fds -> eventsOf fds
+                       in (l, r)
 
 -- | Drop a previous file descriptor registration, without modifying
 -- the event manager's back end.  The return value contains the old
@@ -227,10 +229,11 @@ unregisterFd__ mgr (FdRegistration fd u) = do
                         []   -> Nothing
                         cbs' -> Just cbs'
       fd' = fromIntegral fd
-  atomicModifyIORef (emFds mgr) $ \f ->
+  v@(!a, !b) <- atomicModifyIORef (emFds mgr) $ \f ->
     case IM.updateLookupWithKey dropReg fd' f of
       (Nothing,   _)      -> (f,      (mempty, mempty))
       (Just prev, newMap) -> (newMap, pairEvents prev newMap fd')
+  return v
 
 -- | Drop a previous file descriptor registration, without waking the
 -- event manager thread.  The return value indicates whether the event
@@ -253,8 +256,8 @@ fdWasClosed :: EventManager -> Fd -> IO ()
 fdWasClosed mgr fd = do
   oldEvs <- atomicModifyIORef (emFds mgr) $ \f ->
     case IM.updateLookupWithKey (\ _ _ -> Nothing) (fromIntegral fd) f of
-      (Nothing,  _)      -> (f,      mempty)
-      (Just fds, newMap) -> (newMap, eventsOf fds)
+      (Nothing,  _)       -> (f,      mempty)
+      (Just fds, !newMap) -> (newMap, eventsOf fds)
   when (oldEvs /= mempty) $ wakeManager mgr
 
 ------------------------------------------------------------------------
@@ -268,13 +271,14 @@ registerTimeout mgr ms cb = do
     key <- newUnique (emUniqueSource mgr)
 
     atomicModifyIORef (emTimeouts mgr) $ \q ->
-        (Q.insert key expTime cb q, ())
+        let !q' = Q.insert key expTime cb q in (q', ())
     wakeManager mgr
     return key
 
 clearTimeout :: EventManager -> TimeoutKey -> IO ()
 clearTimeout mgr key = do
-    atomicModifyIORef (emTimeouts mgr) $ \q -> (Q.delete key q, ())
+    atomicModifyIORef (emTimeouts mgr) $ \q ->
+        let !q' = Q.delete key q in (q', ())
     wakeManager mgr
 
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
@@ -283,7 +287,7 @@ updateTimeout mgr key ms = do
     let expTime = fromIntegral ms / 1000.0 + now
 
     atomicModifyIORef (emTimeouts mgr) $ \q ->
-        (Q.adjust (const expTime) key q, ())
+        let !q' = Q.adjust (const expTime) key q in (q', ())
     wakeManager mgr
 
 ------------------------------------------------------------------------

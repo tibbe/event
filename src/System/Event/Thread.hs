@@ -91,8 +91,12 @@ ensureIOManagerIsRunning :: IO ()
 ensureIOManagerIsRunning
   | not threaded = return ()
   | otherwise = modifyMVar_ ioManager $ \old -> do
-  mgr <- new
-  writeIORef eventManager $! Running mgr
+  maybeMgr <- readIORef eventManager
+  mgr <- case maybeMgr of
+           Running m -> return m
+           None      -> do m <- new
+                           writeIORef eventManager $! Running m
+                           return m
   let create = do
         t <- forkIO $ loop mgr
         return $! Running t

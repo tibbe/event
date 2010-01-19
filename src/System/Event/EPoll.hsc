@@ -131,7 +131,7 @@ epollCreate = do
         c_epoll_create 256 -- argument is ignored
   setCloseOnExec fd
 #endif
-  return (EPollFd fd)
+  return $! EPollFd fd
 
 epollControl :: EPollFd -> ControlOp -> Fd -> Ptr Event -> IO ()
 epollControl (EPollFd epfd) (ControlOp op) (Fd fd) event =
