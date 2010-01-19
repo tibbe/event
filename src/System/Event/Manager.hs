@@ -231,7 +231,7 @@ unregisterFd__ mgr (FdRegistration fd u) = do
     case IM.updateLookupWithKey dropReg fd' f of
       (Nothing,   _)      -> (f,      (mempty, mempty))
       (Just prev, newMap) -> (newMap, pairEvents prev newMap fd')
-  return $ v
+  return v
 
 -- | Drop a previous file descriptor registration, without waking the
 -- event manager thread.  The return value indicates whether the event
