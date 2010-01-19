@@ -6,7 +6,7 @@
 -- epoll is a variant of poll that can be used either as an edge-triggered or
 -- a level-triggered interface and scales well to large numbers of watched file
 -- descriptors.
--- 
+--
 -- epoll decouples monitor an fd from the process of registering it.
 --
 module System.Event.EPoll where
@@ -59,7 +59,7 @@ modifyFd ep fd oevt nevt = with (Event (fromEvent nevt) fd) $
 poll :: EPoll                        -- ^ state
      -> Timeout                      -- ^ timeout in milliseconds
      -> (Fd -> E.Event -> IO ()) -- ^ I/O callback
-     -> IO E.Result
+     -> IO ()
 poll ep timeout f = do
     let epfd   = epollFd   ep
     let events = epollEvents ep
@@ -68,14 +68,12 @@ poll ep timeout f = do
          epollWait epfd es cap $ fromTimeout timeout
 
     if n == 0 then
-        return E.TimedOut
+        return ()
       else do
         cap <- A.capacity events
         when (n == cap) $ A.ensureCapacity events (2 * cap)
 
         A.forM_ events $ \e -> f (eventFd e) (toEvent (eventTypes e))
-
-        return E.Activity
 
 newtype EPollFd = EPollFd CInt
 
@@ -123,7 +121,7 @@ newtype EventType = EventType {
 --
 -- The file descriptor returned from epoll_create() should be destroyed via
 -- a call to close() after polling is finished
--- 
+--
 epollCreate :: IO EPollFd
 epollCreate = do
   fd <- throwErrnoIfMinus1 "epollCreate" $
@@ -142,7 +140,7 @@ epollControl (EPollFd epfd) (ControlOp op) (Fd fd) event =
 epollWait :: EPollFd -> Ptr Event -> Int -> Int -> IO Int
 epollWait (EPollFd epfd) events numEvents timeout =
     fmap fromIntegral .
-    throwErrnoIfMinus1 "epollWait" $
+    E.throwErrnoIfMinus1NoRetry "epollWait" $
     c_epoll_wait epfd events (fromIntegral numEvents) (fromIntegral timeout)
 
 fromEvent :: E.Event -> EventType

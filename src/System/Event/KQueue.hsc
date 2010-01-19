@@ -68,7 +68,7 @@ modifyFd q fd _oevt nevt = withMVar (eqChanges q) $ \ch ->
 poll :: EventQueue
      -> Timeout
      -> (Fd -> E.Event -> IO ())
-     -> IO E.Result
+     -> IO ()
 poll EventQueue{..} tout f = do
     changes <- swapMVar eqChanges =<< A.empty
     changesLen <- A.length changes
@@ -80,15 +80,13 @@ poll EventQueue{..} tout f = do
                kevent eqFd changesPtr chLen evPtr evCap
 
     if n == 0 then
-        return E.TimedOut
+        return ()
       else do
         cap <- A.capacity eqEvents
         when (n == cap) $
           A.ensureCapacity eqEvents (2 * cap)
 
         A.forM_ eqEvents $ \e -> f (fromIntegral (ident e)) (toEvent (filter e))
-
-        return E.Activity
 
 ------------------------------------------------------------------------
 -- FFI binding
@@ -235,7 +233,7 @@ kqueue = QueueFd `fmap` throwErrnoIfMinus1 "kqueue" c_kqueue
 kevent :: QueueFd -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
        -> IO Int
 kevent k chs chlen evs evlen ts
-    = fmap fromIntegral $ throwErrnoIfMinus1 "kevent" $
+    = fmap fromIntegral $ E.throwErrnoIfMinus1NoRetry "kevent" $
 #if defined(HAVE_KEVENT64)
       c_kevent64 k chs (fromIntegral chlen) evs (fromIntegral evlen) 0 ts
 #else

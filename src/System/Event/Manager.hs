@@ -149,7 +149,7 @@ loop mgr@EventManager{..} = go =<< getCurrentTime
   where
     go now = do
         timeout <- mkTimeout now
-        _ <- I.poll emBackend timeout (onFdEvent mgr)
+        I.poll emBackend timeout (onFdEvent mgr)
 
         now'    <- getCurrentTime
 

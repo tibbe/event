@@ -41,14 +41,14 @@ modifyFd p fd _oevt nevt = withMVar (pollChanges p) $ \pfd ->
 poll :: Poll
      -> E.Timeout
      -> (Fd -> E.Event -> IO ())
-     -> IO E.Result
+     -> IO ()
 poll p tout f = do
   let a = pollFd p
   A.concat a =<< swapMVar (pollChanges p) =<< A.empty
-  n <- A.useAsPtr a $ \ptr len -> throwErrnoIfMinus1 "c_poll" $
+  n <- A.useAsPtr a $ \ptr len -> E.throwErrnoIfMinus1NoRetry "c_poll" $
          c_poll ptr (fromIntegral len) (fromIntegral (fromTimeout tout))
   if n == 0
-    then return E.TimedOut
+    then return ()
     else do
       A.loop a 0 $ \i e -> do
         let r = pfdRevents e
@@ -57,7 +57,6 @@ poll p tout f = do
                   let i' = i + 1
                   return (i', i' == n)
           else return (i, True)
-      return E.Activity
 
 fromTimeout :: E.Timeout -> Int
 fromTimeout E.Forever      = -1
