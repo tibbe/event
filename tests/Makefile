@@ -6,6 +6,7 @@ ghc-test-flags := -package QuickCheck -package test-framework \
 
 tests: ghc-flags += $(ghc-test-flags)
 tests: $(lib) System/Event/Array/Tests.o System/Event/PSQ/Tests.o RunTests.o
+	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
 %.o: %.hs
