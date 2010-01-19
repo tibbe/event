@@ -8,18 +8,15 @@
 import Args (ljust, parseArgs, positive, theLast)
 import Control.Concurrent (MVar, forkIO, takeMVar, newEmptyMVar, putMVar)
 import Control.Monad (forM_, replicateM, when)
-import Data.Array.Unboxed (UArray, listArray)
 import Data.Function (on)
 import Data.IORef (IORef, atomicModifyIORef, newIORef)
-import Data.Int (Int32)
 import Data.Monoid (Monoid(..), Last(..))
 import Foreign.C.Error (throwErrnoIfMinus1Retry, throwErrnoIfMinus1Retry_)
 import Foreign.Marshal.Alloc (alloca)
-import Foreign.Ptr (Ptr)
-import Foreign.C.Types (CChar)
 import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
-import System.Event (Event(..), evtRead, evtWrite, loop, new, registerFd)
+import System.Event (Event, EventManager, evtRead, evtWrite, loop, new,
+                     registerFd, registerTimeout)
 import System.Posix.IO (createPipe)
 import System.Posix.Resource (ResourceLimit(..), ResourceLimits(..),
                               Resource(..), setResourceLimit)
@@ -27,30 +24,37 @@ import System.Posix.Internals (c_close, c_read, c_write)
 import System.Posix.Types (Fd(..))
 
 data Config = Config {
-      cfgNumPipes :: Last Int
+      cfgDelay :: Last Int
+    , cfgNumPipes :: Last Int
     , cfgNumMessages :: Last Int
     }
 
 defaultConfig :: Config
 defaultConfig = Config {
-                  cfgNumPipes    = ljust 448
+                  cfgDelay       = ljust 0
+                , cfgNumPipes    = ljust 448
                 , cfgNumMessages = ljust 1024
                 }
 
 instance Monoid Config where
     mempty  = Config {
-                cfgNumPipes = mempty
+                cfgDelay = mempty
+              , cfgNumPipes = mempty
               , cfgNumMessages = mempty
               }
     mappend a b = Config {
-                    cfgNumPipes = app cfgNumPipes a b
+                    cfgDelay = app cfgDelay a b
+                  , cfgNumPipes = app cfgNumPipes a b
                   , cfgNumMessages = app cfgNumMessages a b
                   }
         where app = on mappend
 
 defaultOptions :: [OptDescr (IO Config)]
 defaultOptions = [
-  Option ['p'] ["pipes"]
+  Option ['d'] ["delay"]
+         (ReqArg (positive "delay in ms before read" $ \n -> mempty { cfgDelay = n }) "N")
+          "number of pipes to use"
+ ,Option ['p'] ["pipes"]
          (ReqArg (positive "number of pipes" $ \n -> mempty { cfgNumPipes = n }) "N")
           "number of pipes to use"
  ,Option ['m'] ["messages"]
@@ -58,16 +62,16 @@ defaultOptions = [
           "number of messages to send"
  ]
 
-readCallback :: Config -> MVar () -> IORef Int -> Fd -> Event -> IO ()
-readCallback cfg done ref fd _ = do
+readCallback :: Config -> EventManager -> MVar () -> IORef Int -> Fd -> Event
+             -> IO ()
+readCallback cfg mgr done ref fd _ = do
   let numMessages = theLast cfgNumMessages cfg
+      delay       = theLast cfgDelay cfg
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
-  if a > numMessages
-    then do
-      close fd
-      putMVar done ()
-    else do
-      readByte fd
+  case undefined of
+    _ | a > numMessages -> close fd >> putMVar done ()
+      | delay == 0      -> readByte fd
+      | otherwise       -> registerTimeout mgr delay (readByte fd) >> return ()
 
 writeCallback :: Config -> IORef Int -> Fd -> Event -> IO ()
 writeCallback cfg ref fd _ = do
@@ -80,26 +84,22 @@ writeCallback cfg ref fd _ = do
 
 main :: IO ()
 main = do
-    (cfg, args) <- parseArgs defaultConfig defaultOptions =<< getArgs
+    (cfg, _args) <- parseArgs defaultConfig defaultOptions =<< getArgs
     let numPipes = theLast cfgNumPipes cfg
         lim = ResourceLimit $ fromIntegral numPipes * 2 + 50
     setResourceLimit ResourceOpenFiles
         ResourceLimits { softLimit = lim, hardLimit = lim }
 
     pipePairs <- replicateM numPipes createPipe
-    let pipes = concatMap (\(r,w) -> [r,w]) pipePairs
 
     mgr <- new
-    forkIO $ loop mgr
+    _ <- forkIO $ loop mgr
     rref <- newIORef 0
     wref <- newIORef 0
     done <- newEmptyMVar
-    forM_ pipePairs $ \(r,w) -> do
-      registerFd mgr (readCallback cfg done rref) r evtRead
+    forM_ pipePairs $ \(r,w) ->
+      registerFd mgr (readCallback cfg mgr done rref) r evtRead >>
       registerFd mgr (writeCallback cfg wref) w evtWrite
-
-    let pipeArray :: UArray Int Int32
-        pipeArray = listArray (0, numPipes) . map fromIntegral $ pipes
     takeMVar done
 
 readByte :: Fd -> IO ()
@@ -113,6 +113,4 @@ writeByte (Fd fd) =
       when (n /= 1) . error $ "writeByte returned " ++ show n
       
 close :: Fd -> IO ()
-close (Fd fd) = do
-  c_close fd
-  return ()
+close (Fd fd) = c_close fd >> return ()
