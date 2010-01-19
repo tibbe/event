@@ -90,6 +90,7 @@ main = do
     setResourceLimit ResourceOpenFiles
         ResourceLimits { softLimit = lim, hardLimit = lim }
 
+    putStrLn "creating pipes"
     pipePairs <- replicateM numPipes createPipe
 
     mgr <- new
@@ -97,9 +98,13 @@ main = do
     rref <- newIORef 0
     wref <- newIORef 0
     done <- newEmptyMVar
-    forM_ pipePairs $ \(r,w) ->
-      registerFd mgr (readCallback cfg mgr done rref) r evtRead >>
+    putStrLn "registering readers"
+    forM_ pipePairs $ \(r,_) ->
+      registerFd mgr (readCallback cfg mgr done rref) r evtRead
+    putStrLn "registering writers"
+    forM_ pipePairs $ \(_,w) ->
       registerFd mgr (writeCallback cfg wref) w evtWrite
+    putStrLn "waiting until done"
     takeMVar done
 
 readByte :: Fd -> IO ()
@@ -111,6 +116,6 @@ writeByte (Fd fd) =
     alloca $ \p -> do
       n <- throwErrnoIfMinus1Retry "writeByte" $ c_write fd p 1
       when (n /= 1) . error $ "writeByte returned " ++ show n
-      
+
 close :: Fd -> IO ()
 close (Fd fd) = c_close fd >> return ()
