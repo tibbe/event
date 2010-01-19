@@ -4,11 +4,12 @@ module Args
     , ljust
     , parseArgs
     , positive
+    , printUsage
     ) where
 
-import Data.Monoid (Monoid(..), Last(..), getLast)
+import Data.Monoid (Monoid(..), Last(..))
 import System.Console.GetOpt (OptDescr, ArgOrder(Permute), getOpt, usageInfo)
-import System.Environment (getArgs, getProgName)
+import System.Environment (getProgName)
 import System.Exit (ExitCode(..), exitWith)
 import System.IO (hPutStrLn, stderr)
 
