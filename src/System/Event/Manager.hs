@@ -68,7 +68,7 @@ import qualified System.Event.Poll   as Poll
 data FdData = FdData {
       fdUnique   :: {-# UNPACK #-} !Unique
     , fdEvents   :: {-# UNPACK #-} !Event
-    , fdCallback :: {-# UNPACK #-} !IOCallback
+    , _fdCallback :: {-# UNPACK #-} !IOCallback
     }
 
 -- | Callback invoked on I/O events.
@@ -132,12 +132,8 @@ newWith be = do
                          , emUniqueSource = us
                          , emControl = ctrl
                          }
-      read_fd  = controlReadFd ctrl
-      event_fd = controlEventFd ctrl
-  _ <- registerFd_ mgr (handleControlEvent mgr) read_fd evtRead
-  when (read_fd /= event_fd) $ do
-    _ <- registerFd_ mgr (handleControlEvent mgr) event_fd evtRead
-    return ()
+  _ <- registerFd_ mgr (handleControlEvent mgr) (controlReadFd ctrl) evtRead
+  _ <- registerFd_ mgr (handleControlEvent mgr) (wakeupReadFd ctrl) evtRead
   return mgr
 
 ------------------------------------------------------------------------
@@ -229,7 +225,7 @@ unregisterFd__ mgr (FdRegistration fd u) = do
                         []   -> Nothing
                         cbs' -> Just cbs'
       fd' = fromIntegral fd
-  v@(!a, !b) <- atomicModifyIORef (emFds mgr) $ \f ->
+  v@(!_, !_) <- atomicModifyIORef (emFds mgr) $ \f ->
     case IM.updateLookupWithKey dropReg fd' f of
       (Nothing,   _)      -> (f,      (mempty, mempty))
       (Just prev, newMap) -> (newMap, pairEvents prev newMap fd')
