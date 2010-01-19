@@ -6,7 +6,6 @@ module System.Event.Internal
     , evtRead
     , evtWrite
     , eventIs
-    , Result(..)
     , Timeout(..)
     ) where
 
@@ -59,9 +58,6 @@ data Timeout = Timeout {-# UNPACK #-} !CInt
              | Forever
                deriving (Show)
 
--- | Indicates whether poll returned because of activity or timeout
-data Result = Activity | TimedOut
-
 -- | Event notification backend.
 class Backend a where
     -- | Create a new backend.
@@ -72,7 +68,7 @@ class Backend a where
     poll :: a                          -- ^ backend state
          -> Timeout                    -- ^ timeout in milliseconds
          -> (Fd -> Event -> IO ())     -- ^ I/O callback
-         -> IO Result
+         -> IO ()
 
     -- | Register, modify, or unregister interest in the given events
     -- on the given file descriptor.
