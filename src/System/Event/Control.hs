@@ -114,16 +114,16 @@ sendWakeup c = alloca $ \p -> do
   throwErrnoIfMinus1_ "sendWakeup" $
     c_write (fromIntegral (controlEventFd c)) (castPtr p) 8
 #else
-sendWakeup c = sendControlMessage c CMsgWakeup
+sendWakeup c = sendControlMessage "sendWakeup" c CMsgWakeup
 #endif
 
 sendDie :: Control -> IO ()
-sendDie c = sendControlMessage c CMsgDie
+sendDie c = sendControlMessage "sendDie" c CMsgDie
 
-sendControlMessage :: Control -> ControlMessage -> IO ()
-sendControlMessage w msg = alloca $ \p -> do
+sendControlMessage :: String -> Control -> ControlMessage -> IO ()
+sendControlMessage what w msg = alloca $ \p -> do
   poke p (fromIntegral (fromEnum msg))
-  throwErrnoIfMinus1_ "sendControlMessage" $
+  throwErrnoIfMinus1_ what $
     c_write (fromIntegral (controlWriteFd w)) p 1
 
 #if defined(HAVE_EVENTFD)
