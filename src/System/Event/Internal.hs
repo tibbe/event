@@ -6,12 +6,14 @@ module System.Event.Internal
     , evtRead
     , evtWrite
     , eventIs
+    , throwErrnoIfMinus1NoRetry
     , Timeout(..)
     ) where
 
 import Data.Bits ((.|.), (.&.))
 import Data.List (foldl')
 import Data.Monoid (Monoid(..))
+import Foreign.C.Error (eINTR, getErrno, throwErrno)
 import Foreign.C.Types (CInt)
 import System.Posix.Types (Fd)
 
@@ -77,3 +79,17 @@ class Backend a where
              -> Event    -- ^ old events to watch for ('mempty' for new)
              -> Event    -- ^ new events to watch for ('mempty' to delete)
              -> IO ()
+
+-- | Throw an 'IOError' corresponding to the current value of
+-- 'getErrno' if the result value of the 'IO' action is -1 and
+-- 'getErrno' is not 'eINTR'.  If the result value is -1 and
+-- 'getErrno' returns 'eINTR' 0 is returned.  Otherwise the result
+-- value is returned.
+throwErrnoIfMinus1NoRetry :: Num a => String -> IO a -> IO a
+throwErrnoIfMinus1NoRetry loc f = do
+    res <- f
+    if res == -1
+        then do
+            err <- getErrno
+            if err == eINTR then return 0 else throwErrno loc
+        else return res

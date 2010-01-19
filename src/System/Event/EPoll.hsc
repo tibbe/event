@@ -140,7 +140,7 @@ epollControl (EPollFd epfd) (ControlOp op) (Fd fd) event =
 epollWait :: EPollFd -> Ptr Event -> Int -> Int -> IO Int
 epollWait (EPollFd epfd) events numEvents timeout =
     fmap fromIntegral .
-    throwErrnoIfMinus1 "epollWait" $
+    E.throwErrnoIfMinus1NoRetry "epollWait" $
     c_epoll_wait epfd events (fromIntegral numEvents) (fromIntegral timeout)
 
 fromEvent :: E.Event -> EventType

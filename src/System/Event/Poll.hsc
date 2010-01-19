@@ -45,7 +45,7 @@ poll :: Poll
 poll p tout f = do
   let a = pollFd p
   A.concat a =<< swapMVar (pollChanges p) =<< A.empty
-  n <- A.useAsPtr a $ \ptr len -> throwErrnoIfMinus1 "c_poll" $
+  n <- A.useAsPtr a $ \ptr len -> E.throwErrnoIfMinus1NoRetry "c_poll" $
          c_poll ptr (fromIntegral len) (fromIntegral (fromTimeout tout))
   if n == 0
     then return ()

@@ -233,7 +233,7 @@ kqueue = QueueFd `fmap` throwErrnoIfMinus1 "kqueue" c_kqueue
 kevent :: QueueFd -> Ptr Event -> Int -> Ptr Event -> Int -> Ptr TimeSpec
        -> IO Int
 kevent k chs chlen evs evlen ts
-    = fmap fromIntegral $ throwErrnoIfMinus1 "kevent" $
+    = fmap fromIntegral $ E.throwErrnoIfMinus1NoRetry "kevent" $
 #if defined(HAVE_KEVENT64)
       c_kevent64 k chs (fromIntegral chlen) evs (fromIntegral evlen) 0 ts
 #else
