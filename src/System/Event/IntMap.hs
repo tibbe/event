@@ -39,37 +39,38 @@
 -- (32 or 64).
 -----------------------------------------------------------------------------
 
-module System.Event.IntMap (
-            -- * Map type
-              IntMap, Key          -- instance Eq,Show
+module System.Event.IntMap
+    (
+    -- * Map type
+    IntMap
+    , Key
 
-            -- * Query
-            , lookup
+    -- * Query
+    , lookup
 
-            -- * Construction
-            , empty
+    -- * Construction
+    , empty
 
-            -- ** Insertion
-            , insertLookupWithKey
+    -- * Insertion
+    , insertLookupWithKey
 
-            -- ** Update
-            , updateLookupWithKey
-            ) where
+    -- * Update
+    , updateLookupWithKey
+    ) where
 
-
-import Prelude hiding (lookup,map,filter,foldr,foldl,null)
+import Prelude hiding (lookup, map, filter, foldr, foldl, null)
 import Data.Bits
 
 #if __GLASGOW_HASKELL__ >= 503
-import GHC.Exts ( Word(..), Int(..), shiftRL# )
+import GHC.Exts (Word(..), Int(..), shiftRL#)
 #elif __GLASGOW_HASKELL__
 import Word
-import GlaExts ( Word(..), Int(..), shiftRL# )
+import GlaExts (Word(..), Int(..), shiftRL#)
 #else
 import Data.Word
 #endif
 
--- A "Nat" is a natural machine word (an unsigned Int)
+-- | A @Nat@ is a natural machine word (an unsigned Int)
 type Nat = Word
 
 natFromInt :: Key -> Nat
@@ -80,35 +81,34 @@ intFromNat w = fromIntegral w
 
 shiftRL :: Nat -> Key -> Nat
 #if __GLASGOW_HASKELL__
-{--------------------------------------------------------------------
-  GHC: use unboxing to get @shiftRL@ inlined.
---------------------------------------------------------------------}
-shiftRL (W# x) (I# i)
-  = W# (shiftRL# x i)
+-- GHC: use unboxing to get @shiftRL@ inlined.
+shiftRL (W# x) (I# i) = W# (shiftRL# x i)
 #else
-shiftRL x i   = shiftR x i
+shiftRL x i = shiftR x i
 #endif
 
-{--------------------------------------------------------------------
-  Types
---------------------------------------------------------------------}
+------------------------------------------------------------------------
+-- Types
+
 -- | A map of integers to values @a@.
 data IntMap a = Nil
               | Tip {-# UNPACK #-} !Key !a
-              | Bin {-# UNPACK #-} !Prefix {-# UNPACK #-} !Mask !(IntMap a) !(IntMap a)
+              | Bin {-# UNPACK #-} !Prefix
+                    {-# UNPACK #-} !Mask
+                    !(IntMap a)
+                    !(IntMap a)
 
 type Prefix = Int
 type Mask   = Int
 type Key    = Int
 
-{--------------------------------------------------------------------
-  Query
---------------------------------------------------------------------}
+------------------------------------------------------------------------
+-- Query
 
--- | /O(min(n,W))/. Lookup the value at a key in the map. See also 'Data.Map.lookup'.
+-- | /O(min(n,W))/ Lookup the value at a key in the map.  See also
+-- 'Data.Map.lookup'.
 lookup :: Key -> IntMap a -> Maybe a
-lookup k t
-  = let nk = natFromInt k  in seq nk (lookupN nk t)
+lookup k t = let nk = natFromInt k in seq nk (lookupN nk t)
 
 lookupN :: Nat -> IntMap a -> Maybe a
 lookupN k t
@@ -121,23 +121,20 @@ lookupN k t
         | otherwise             -> Nothing
       Nil -> Nothing
 
-{--------------------------------------------------------------------
-  Construction
---------------------------------------------------------------------}
--- | /O(1)/. The empty map.
+------------------------------------------------------------------------
+-- Construction
+
+-- | /O(1)/ The empty map.
 --
 -- > empty      == fromList []
 -- > size empty == 0
-
 empty :: IntMap a
-empty
-  = Nil
+empty = Nil
 
-{--------------------------------------------------------------------
-  Insert
---------------------------------------------------------------------}
+------------------------------------------------------------------------
+-- Insert
 
--- | /O(min(n,W))/. The expression (@'insertLookupWithKey' f k x map@)
+-- | /O(min(n,W))/ The expression (@'insertLookupWithKey' f k x map@)
 -- is a pair where the first element is equal to (@'lookup' k map@)
 -- and the second element equal to (@'insertWithKey' f k x map@).
 --
@@ -145,73 +142,66 @@ empty
 -- > insertLookupWithKey f 5 "xxx" (fromList [(5,"a"), (3,"b")]) == (Just "a", fromList [(3, "b"), (5, "5:xxx|a")])
 -- > insertLookupWithKey f 7 "xxx" (fromList [(5,"a"), (3,"b")]) == (Nothing,  fromList [(3, "b"), (5, "a"), (7, "xxx")])
 -- > insertLookupWithKey f 5 "xxx" empty                         == (Nothing,  singleton 5 "xxx")
---
--- This is how to define @insertLookup@ using @insertLookupWithKey@:
---
--- > let insertLookup kx x t = insertLookupWithKey (\_ a _ -> a) kx x t
--- > insertLookup 5 "x" (fromList [(5,"a"), (3,"b")]) == (Just "a", fromList [(3, "b"), (5, "x")])
--- > insertLookup 7 "x" (fromList [(5,"a"), (3,"b")]) == (Nothing,  fromList [(3, "b"), (5, "a"), (7, "x")])
-
-insertLookupWithKey :: (Key -> a -> a -> a) -> Key -> a -> IntMap a -> (Maybe a, IntMap a)
-insertLookupWithKey f k x t
-  = case t of
-      Bin p m l r
-        | nomatch k p m -> (Nothing,join k (Tip k x) p t)
-        | zero k m      -> let (found,l') = insertLookupWithKey f k x l in (found,Bin p m l' r)
-        | otherwise     -> let (found,r') = insertLookupWithKey f k x r in (found,Bin p m l r')
-      Tip ky y
-        | k==ky         -> (Just y,Tip k (f k x y))
-        | otherwise     -> (Nothing,join k (Tip k x) ky t)
-      Nil -> (Nothing,Tip k x)
+insertLookupWithKey :: (Key -> a -> a -> a) -> Key -> a -> IntMap a
+                    -> (Maybe a, IntMap a)
+insertLookupWithKey f k x t = case t of
+    Bin p m l r
+        | nomatch k p m -> (Nothing, join k (Tip k x) p t)
+        | zero k m      -> let (found, l') = insertLookupWithKey f k x l
+                           in (found, Bin p m l' r)
+        | otherwise     -> let (found, r') = insertLookupWithKey f k x r
+                           in (found, Bin p m l r')
+    Tip ky y
+        | k == ky       -> (Just y, Tip k (f k x y))
+        | otherwise     -> (Nothing, join k (Tip k x) ky t)
+    Nil                 -> (Nothing, Tip k x)
 
 
-{--------------------------------------------------------------------
-  Update
---------------------------------------------------------------------}
+------------------------------------------------------------------------
+-- Update
 
-updateLookupWithKey ::  (Key -> a -> Maybe a) -> Key -> IntMap a -> (Maybe a,IntMap a)
-updateLookupWithKey f k t
-  = case t of
-      Bin p m l r
-        | nomatch k p m -> (Nothing,t)
-        | zero k m      -> let (found,l') = updateLookupWithKey f k l in (found,bin p m l' r)
-        | otherwise     -> let (found,r') = updateLookupWithKey f k r in (found,bin p m l r')
-      Tip ky y
-        | k==ky         -> case (f k y) of
-                             Just y' -> (Just y,Tip ky y')
-                             Nothing -> (Just y,Nil)
-        | otherwise     -> (Nothing,t)
-      Nil -> (Nothing,Nil)
+updateLookupWithKey :: (Key -> a -> Maybe a) -> Key -> IntMap a
+                    -> (Maybe a, IntMap a)
+updateLookupWithKey f k t = case t of
+    Bin p m l r
+        | nomatch k p m -> (Nothing, t)
+        | zero k m      -> let (found, l') = updateLookupWithKey f k l
+                           in (found, bin p m l' r)
+        | otherwise     -> let (found, r') = updateLookupWithKey f k r
+                           in (found, bin p m l r')
+    Tip ky y
+        | k == ky       -> case (f k y) of
+                               Just y' -> (Just y, Tip ky y')
+                               Nothing -> (Just y, Nil)
+        | otherwise     -> (Nothing, t)
+    Nil                 -> (Nothing, Nil)
 
-{--------------------------------------------------------------------
-  Eq
---------------------------------------------------------------------}
+------------------------------------------------------------------------
+-- Eq
+
 instance Eq a => Eq (IntMap a) where
-  t1 == t2  = equal t1 t2
-  t1 /= t2  = nequal t1 t2
+    t1 == t2 = equal t1 t2
+    t1 /= t2 = nequal t1 t2
 
 equal :: Eq a => IntMap a -> IntMap a -> Bool
 equal (Bin p1 m1 l1 r1) (Bin p2 m2 l2 r2)
-  = (m1 == m2) && (p1 == p2) && (equal l1 l2) && (equal r1 r2)
+    = (m1 == m2) && (p1 == p2) && (equal l1 l2) && (equal r1 r2)
 equal (Tip kx x) (Tip ky y)
-  = (kx == ky) && (x==y)
+    = (kx == ky) && (x==y)
 equal Nil Nil = True
 equal _   _   = False
 
 nequal :: Eq a => IntMap a -> IntMap a -> Bool
 nequal (Bin p1 m1 l1 r1) (Bin p2 m2 l2 r2)
-  = (m1 /= m2) || (p1 /= p2) || (nequal l1 l2) || (nequal r1 r2)
+    = (m1 /= m2) || (p1 /= p2) || (nequal l1 l2) || (nequal r1 r2)
 nequal (Tip kx x) (Tip ky y)
-  = (kx /= ky) || (x/=y)
+    = (kx /= ky) || (x/=y)
 nequal Nil Nil = False
 nequal _   _   = True
 
-{--------------------------------------------------------------------
-  Helpers
---------------------------------------------------------------------}
-{--------------------------------------------------------------------
-  Join
---------------------------------------------------------------------}
+------------------------------------------------------------------------
+-- Utility functions
+
 join :: Prefix -> IntMap a -> Prefix -> IntMap a -> IntMap a
 join p1 t1 p2 t2
   | zero p1 m = Bin p m t1 t2
@@ -220,87 +210,74 @@ join p1 t1 p2 t2
     m = branchMask p1 p2
     p = mask p1 m
 
-{--------------------------------------------------------------------
-  @bin@ assures that we never have empty trees within a tree.
---------------------------------------------------------------------}
+-- | @bin@ assures that we never have empty trees within a tree.
 bin :: Prefix -> Mask -> IntMap a -> IntMap a -> IntMap a
 bin _ _ l Nil = l
 bin _ _ Nil r = r
 bin p m l r   = Bin p m l r
 
+------------------------------------------------------------------------
+-- Endian independent bit twiddling
 
-{--------------------------------------------------------------------
-  Endian independent bit twiddling
---------------------------------------------------------------------}
 zero :: Key -> Mask -> Bool
-zero i m
-  = (natFromInt i) .&. (natFromInt m) == 0
+zero i m = (natFromInt i) .&. (natFromInt m) == 0
 
 nomatch :: Key -> Prefix -> Mask -> Bool
-nomatch i p m
-  = (mask i m) /= p
+nomatch i p m = (mask i m) /= p
 
 mask :: Key -> Mask -> Prefix
-mask i m
-  = maskW (natFromInt i) (natFromInt m)
-
+mask i m = maskW (natFromInt i) (natFromInt m)
 
 zeroN :: Nat -> Nat -> Bool
 zeroN i m = (i .&. m) == 0
 
-{--------------------------------------------------------------------
-  Big endian operations
---------------------------------------------------------------------}
+------------------------------------------------------------------------
+-- Big endian operations
+
 maskW :: Nat -> Nat -> Prefix
-maskW i m
-  = intFromNat (i .&. (complement (m-1) `xor` m))
+maskW i m = intFromNat (i .&. (complement (m-1) `xor` m))
 
 branchMask :: Prefix -> Prefix -> Mask
 branchMask p1 p2
-  = intFromNat (highestBitMask (natFromInt p1 `xor` natFromInt p2))
+    = intFromNat (highestBitMask (natFromInt p1 `xor` natFromInt p2))
 
-{----------------------------------------------------------------------
-  Finding the highest bit (mask) in a word [x] can be done efficiently in
-  three ways:
-  * convert to a floating point value and the mantissa tells us the
-    [log2(x)] that corresponds with the highest bit position. The mantissa
-    is retrieved either via the standard C function [frexp] or by some bit
-    twiddling on IEEE compatible numbers (float). Note that one needs to
-    use at least [double] precision for an accurate mantissa of 32 bit
-    numbers.
-  * use bit twiddling, a logarithmic sequence of bitwise or's and shifts (bit).
-  * use processor specific assembler instruction (asm).
+{-
+Finding the highest bit mask in a word [x] can be done efficiently in
+three ways:
 
-  The most portable way would be [bit], but is it efficient enough?
-  I have measured the cycle counts of the different methods on an AMD
-  Athlon-XP 1800 (~ Pentium III 1.8Ghz) using the RDTSC instruction:
+* convert to a floating point value and the mantissa tells us the
+  [log2(x)] that corresponds with the highest bit position. The mantissa
+  is retrieved either via the standard C function [frexp] or by some bit
+  twiddling on IEEE compatible numbers (float). Note that one needs to
+  use at least [double] precision for an accurate mantissa of 32 bit
+  numbers.
 
-  highestBitMask: method  cycles
-                  --------------
-                   frexp   200
-                   float    33
-                   bit      11
-                   asm      12
+* use bit twiddling, a logarithmic sequence of bitwise or's and shifts (bit).
 
-  highestBit:     method  cycles
-                  --------------
-                   frexp   195
-                   float    33
-                   bit      11
-                   asm      11
+* use processor specific assembler instruction (asm).
 
-  Wow, the bit twiddling is on today's RISC like machines even faster
-  than a single CISC instruction (BSR)!
-----------------------------------------------------------------------}
+The most portable way would be [bit], but is it efficient enough?
+I have measured the cycle counts of the different methods on an AMD
+Athlon-XP 1800 (~ Pentium III 1.8Ghz) using the RDTSC instruction:
 
-{----------------------------------------------------------------------
-  [highestBitMask] returns a word where only the highest bit is set.
-  It is found by first setting all bits in lower positions than the
-  highest bit and than taking an exclusive or with the original value.
-  Allthough the function may look expensive, GHC compiles this into
-  excellent C code that subsequently compiled into highly efficient
-  machine code. The algorithm is derived from Jorg Arndt's FXT library.
-----------------------------------------------------------------------}
+highestBitMask: method  cycles
+                --------------
+                 frexp   200
+                 float    33
+                 bit      11
+                 asm      12
+
+Wow, the bit twiddling is on today's RISC like machines even faster
+than a single CISC instruction (BSR)!
+-}
+
+-- | @highestBitMask@ returns a word where only the highest bit is
+-- set.  It is found by first setting all bits in lower positions than
+-- the highest bit and than taking an exclusive or with the original
+-- value.  Allthough the function may look expensive, GHC compiles
+-- this into excellent C code that subsequently compiled into highly
+-- efficient machine code. The algorithm is derived from Jorg Arndt's
+-- FXT library.
 highestBitMask :: Nat -> Nat
 highestBitMask x0
   = case (x0 .|. shiftRL x0 1) of
