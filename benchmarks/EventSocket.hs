@@ -15,7 +15,7 @@ import Foreign.Ptr (Ptr)
 import Network.Socket (SockAddr, Socket(..), SocketStatus(..))
 import Network.Socket.Internal
 import System.Event.Thread
-import qualified System.Posix.Internals
+import System.Posix.Internals
 
 ------------------------------------------------------------------------
 -- Sending
@@ -57,9 +57,10 @@ accept sock@(MkSocket s family stype protocol status) = do
     let sz = sizeOfSockAddrByFamily family
     allocaBytes sz $ \ sockaddr -> do
         with (fromIntegral sz) $ \ ptr_len -> do
-        new_sock <- c_accept s sockaddr ptr_len
-        -- XXX: invalid argument (Bad file descriptor)
-        System.Posix.Internals.setNonBlockingFD new_sock
+        new_sock <- throwSocketErrorIfMinus1RetryMayBlock "accept"
+                    (threadWaitRead (fromIntegral s)) $
+                    c_accept s sockaddr ptr_len
+        setNonBlockingFD new_sock
         addr <- peekSockAddr sockaddr
         new_status <- newMVar Connected
         return (MkSocket new_sock family stype protocol new_status)
