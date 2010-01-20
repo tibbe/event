@@ -19,20 +19,22 @@ module System.Event.Control
 
 #include "EventConfig.h"
 
-import Control.Monad (when)
-import Foreign.C.Error (eAGAIN, eWOULDBLOCK, getErrno, throwErrnoIfMinus1_, throwErrno)
+import Foreign.C.Error (throwErrnoIfMinus1_)
+import Foreign.C.Types (CInt)
 import Foreign.Marshal (alloca, allocaBytes)
 import Foreign.Marshal.Array (allocaArray)
 import Foreign.Storable (peek, peekElemOff, poke)
-import System.Posix.Internals (FD, c_close, c_pipe, c_read, c_write,
+import System.Posix.Internals (c_close, c_pipe, c_read, c_write,
                                setCloseOnExec, setNonBlockingFD)
 import System.Posix.Types (Fd)
 
 #if defined(HAVE_EVENTFD)
 import Data.Word (Word64)
 import Foreign.C.Error (throwErrnoIfMinus1)
-import Foreign.C.Types (CInt)
 import Foreign.Ptr (castPtr)
+#else
+import Control.Monad (when)
+import Foreign.C.Error (eAGAIN, eWOULDBLOCK, getErrno, throwErrno)
 #endif
 
 data ControlMessage = CMsgWakeup
@@ -57,7 +59,7 @@ wakeupReadFd = controlEventFd
 {-# INLINE wakeupReadFd #-}
 #endif
 
-setNonBlock :: FD -> IO ()
+setNonBlock :: CInt -> IO ()
 setNonBlock fd =
 #if __GLASGOW_HASKELL__ >= 611
   setNonBlockingFD fd True
