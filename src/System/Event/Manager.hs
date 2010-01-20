@@ -141,17 +141,12 @@ newWith be = do
 
 -- | Start handling events.  This function loops until told to stop.
 loop :: EventManager -> IO ()
-loop mgr@EventManager{..} = go =<< getCurrentTime
+loop mgr@EventManager{..} = go
   where
-    go now = do
-        timeout <- mkTimeout now
-        I.poll emBackend timeout (onFdEvent mgr)
-
-        now'    <- getCurrentTime
-
-        keepRunning <- readIORef emKeepRunning
-        when keepRunning $
-          go now'
+    go = do
+      timeout <- mkTimeout =<< getCurrentTime
+      I.poll emBackend timeout (onFdEvent mgr)
+      flip when go =<< readIORef emKeepRunning
 
     -- | Call all expired timer callbacks and return the time to the
     -- next timeout.
