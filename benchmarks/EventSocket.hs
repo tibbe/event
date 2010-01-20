@@ -75,7 +75,7 @@ sendAll sock bs = do
 ------------------------------------------------------------------------
 -- Accepting
 
-accept :: Socket -> IO Socket
+accept :: Socket -> IO (Socket, SockAddr)
 accept sock@(MkSocket s family stype protocol status) = do
     currentStatus <- readMVar status
     let sz = sizeOfSockAddrByFamily family
@@ -87,7 +87,7 @@ accept sock@(MkSocket s family stype protocol status) = do
         setNonBlockingFD new_sock
         addr <- peekSockAddr sockaddr
         new_status <- newMVar Connected
-        return (MkSocket new_sock family stype protocol new_status)
+        return (MkSocket new_sock family stype protocol new_status, addr)
 
 {-# SPECIALISE
     throwErrnoIfMinus1Retry_mayBlock

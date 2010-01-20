@@ -2,7 +2,7 @@ ghc-opt-flags = -O2
 
 include ../tests/common.mk
 
-ghc-bench-flags := -package network
+ghc-bench-flags := -package network -package network-bytestring
 
 .PHONY: all
 all: pong simple timers

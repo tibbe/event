@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP, OverloadedStrings #-}
 
 -- Requires the network-bytestring library.
 --
@@ -7,9 +7,14 @@
 
 import Control.Concurrent (forkIO)
 import Data.ByteString.Char8 ()
-import EventSocket
 import Network (PortID(..), listenOn)
 import Network.Socket (Socket, sClose)
+#if 1
+import EventSocket (accept, recv, sendAll)
+#else
+import Network.Socket (accept)
+import Network.Socket.ByteString (recv, sendAll)
+#endif
 import System.Event.Thread (ensureIOManagerIsRunning)
 
 main = do
@@ -21,14 +26,14 @@ acceptConnections :: Socket -> IO ()
 acceptConnections sock = loop
   where
     loop = do
-        c <- accept sock
+        (c,_) <- accept sock
         forkIO $ client c
         loop
 
 client :: Socket -> IO ()
 client sock = do
-    -- recv sock 4096
+    recv sock 4096
     sendAll sock msg
     sClose sock
 
-msg = "HTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 7\r\n\r\nPong!\r\n"
+msg = "HTTP/1.0 200 OK\r\n\r\nContent-Length: 5\r\n\r\nPong!\r\n"
