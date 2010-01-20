@@ -17,6 +17,7 @@ module System.Event
     , registerFd
     , unregisterFd
     , fdWasClosed
+    , regFd
 
       -- * Registering interest in timeout events
     , TimeoutCallback

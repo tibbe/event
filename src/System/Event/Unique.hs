@@ -13,7 +13,10 @@ import Data.Int (Int64)
 newtype UniqueSource = US (IORef Int64)
 
 newtype Unique = Unique { asInt64 :: Int64 }
-    deriving (Eq, Ord, Num, Show)
+    deriving (Eq, Ord, Num)
+
+instance Show Unique where
+    show = show . asInt64
 
 newSource :: IO UniqueSource
 newSource = US `fmap` newIORef 0

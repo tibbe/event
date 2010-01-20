@@ -52,7 +52,7 @@ new = liftM2 EPoll epollCreate (A.new 64)
 
 modifyFd :: EPoll -> Fd -> E.Event -> E.Event -> IO ()
 modifyFd ep fd oevt nevt = with (Event (fromEvent nevt) fd) $
-                           epollControl (epollFd ep) op fd
+                             epollControl (epollFd ep) op fd
   where op | oevt == mempty = controlOpAdd
            | nevt == mempty = controlOpDelete
            | otherwise      = controlOpModify

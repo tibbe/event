@@ -17,6 +17,7 @@ module System.Event.Manager
     , evtWrite
     , IOCallback
     , FdRegistration
+    , regFd
     , registerFd_
     , registerFd
     , unregisterFd_
@@ -66,13 +67,19 @@ import qualified System.Event.Poll   as Poll
 -- Types
 
 data FdData = FdData {
-      fdUnique   :: {-# UNPACK #-} !Unique
-    , fdEvents   :: {-# UNPACK #-} !Event
+      fdReg       :: {-# UNPACK #-} !FdRegistration
+    , fdEvents    :: {-# UNPACK #-} !Event
     , _fdCallback :: {-# UNPACK #-} !IOCallback
     }
 
+-- | A file descriptor registration cookie.
+data FdRegistration = FdRegistration {
+      regFd     :: {-# UNPACK #-} !Fd
+    , regUnique :: {-# UNPACK #-} !Unique
+    } deriving (Eq, Show)
+
 -- | Callback invoked on I/O events.
-type IOCallback = Fd -> Event -> IO ()
+type IOCallback = FdRegistration -> Event -> IO ()
 
 type TimeRep         = Double
 type TimeoutKey      = Unique
@@ -93,9 +100,9 @@ data EventManager = forall a. Backend a => EventManager
 ------------------------------------------------------------------------
 -- Creation
 
-handleControlEvent :: EventManager -> Fd -> Event -> IO ()
-handleControlEvent mgr fd _evt = do
-  msg <- readControlMessage (emControl mgr) fd
+handleControlEvent :: EventManager -> FdRegistration -> Event -> IO ()
+handleControlEvent mgr reg _evt = do
+  msg <- readControlMessage (emControl mgr) (regFd reg)
   case msg of
     CMsgWakeup -> return ()
     CMsgDie    -> writeIORef (emKeepRunning mgr) False
@@ -163,12 +170,6 @@ loop mgr@EventManager{..} = go
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
 
--- | A file descriptor registration cookie.
-data FdRegistration = FdRegistration {
-      _regFd     :: {-# UNPACK #-} !Fd
-    , _regUnique :: {-# UNPACK #-} !Unique
-    } deriving (Eq, Ord)
-
 -- | Register interest in the given events, without waking the event
 -- manager thread.  The 'Bool' return value indicates whether the
 -- event manager needs to be woken.
@@ -178,12 +179,12 @@ registerFd_ EventManager{..} cb fd evs = do
   u <- newUnique emUniqueSource
   modifyMVar emFds $ \oldMap -> do
     let fd' = fromIntegral fd
-        (!newMap, (oldEvs, newEvs)) = case IM.insertLookupWithKey (const (++)) fd' [FdData u evs cb] oldMap of
+        reg = FdRegistration fd u
+        (!newMap, (oldEvs, newEvs)) = case IM.insertLookupWithKey (const (++)) fd' [FdData reg evs cb] oldMap of
                              (Nothing,   n) -> (n, (mempty, evs))
                              (Just prev, n) -> (n, pairEvents prev newMap fd')
         modify = oldEvs /= newEvs
     when modify $ I.modifyFd emBackend fd oldEvs newEvs
-    let !reg = FdRegistration fd u
     return (newMap, (reg, modify))
 {-# INLINE registerFd_ #-}
 
@@ -217,13 +218,14 @@ pairEvents prev m fd = let !l = eventsOf prev
 unregisterFd_ :: EventManager -> FdRegistration -> IO Bool
 unregisterFd_ EventManager{..} (FdRegistration fd u) =
   modifyMVar emFds $ \oldMap -> do
-    let dropReg _ cbs = case filter ((/= u) . fdUnique) cbs of
+    let dropReg _ cbs = case filter ((/= u) . regUnique . fdReg) cbs of
                           []   -> Nothing
                           cbs' -> Just cbs'
         fd' = fromIntegral fd
-        (!newMap, (oldEvs, newEvs)) = case IM.updateLookupWithKey dropReg fd' oldMap of
-                                       (Nothing,   _)   -> (oldMap, (mempty, mempty))
-                                       (Just prev, new) -> (newMap, pairEvents prev newMap fd')
+        (!newMap, (oldEvs, newEvs)) =
+            case IM.updateLookupWithKey dropReg fd' oldMap of
+              (Nothing,   _)    -> (oldMap, (mempty, mempty))
+              (Just prev, newm) -> (newm, pairEvents prev newm fd')
         modify = oldEvs /= newEvs
     when modify $ I.modifyFd emBackend fd oldEvs newEvs
     return (newMap, modify)
@@ -280,8 +282,8 @@ updateTimeout mgr key ms = do
 -- | Call the callbacks corresponding to the given file descriptor.
 onFdEvent :: EventManager -> Fd -> Event -> IO ()
 onFdEvent mgr fd evs = do
-    fds <- readMVar (emFds mgr)
-    case IM.lookup (fromIntegral fd) fds of
-        Just cbs -> forM_ cbs $ \(FdData _ ev cb) ->
-                      when (evs `I.eventIs` ev) $ cb fd evs
-        Nothing  -> return ()
+  fds <- readMVar (emFds mgr)
+  case IM.lookup (fromIntegral fd) fds of
+      Just cbs -> forM_ cbs $ \(FdData reg ev cb) ->
+                    when (evs `I.eventIs` ev) $ cb reg evs
+      Nothing  -> return ()
