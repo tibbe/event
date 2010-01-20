@@ -24,4 +24,5 @@ TAGS
 *.orig
 benchmarks/simple
 benchmarks/timers
+benchmarks/pong
 tests/tests
