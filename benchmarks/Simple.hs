@@ -15,8 +15,8 @@ import Foreign.C.Error (throwErrnoIfMinus1Retry, throwErrnoIfMinus1Retry_)
 import Foreign.Marshal.Alloc (alloca)
 import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
-import System.Event (Event, EventManager, FdRegistration, evtRead, evtWrite, loop, new,
-                     registerFd, registerTimeout, regFd)
+import System.Event (Event, EventManager, FdKey(..), evtRead, evtWrite, loop,
+                     new, registerFd, registerTimeout)
 import System.Posix.IO (createPipe)
 import System.Posix.Resource (ResourceLimit(..), ResourceLimits(..),
                               Resource(..), setResourceLimit)
@@ -63,21 +63,21 @@ defaultOptions = [
  ]
 
 readCallback :: Config -> EventManager -> MVar () -> IORef Int
-             -> FdRegistration -> Event -> IO ()
+             -> FdKey -> Event -> IO ()
 readCallback cfg mgr done ref reg _ = do
   let numMessages = theLast cfgNumMessages cfg
       delay       = theLast cfgDelay cfg
-      fd          = regFd reg
+      fd          = keyFd reg
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
   case undefined of
     _ | a > numMessages -> close fd >> putMVar done ()
       | delay == 0      -> readByte fd
       | otherwise       -> registerTimeout mgr delay (readByte fd) >> return ()
 
-writeCallback :: Config -> IORef Int -> FdRegistration -> Event -> IO ()
+writeCallback :: Config -> IORef Int -> FdKey -> Event -> IO ()
 writeCallback cfg ref reg _ = do
   let numMessages = theLast cfgNumMessages cfg
-      fd = regFd reg
+      fd = keyFd reg
   a <- atomicModifyIORef ref (\a -> let !b = a+1 in (b,b))
   if a > numMessages
     then close fd
