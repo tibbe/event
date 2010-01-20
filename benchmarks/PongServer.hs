@@ -27,7 +27,8 @@ acceptConnections sock = loop
 
 client :: Socket -> IO ()
 client sock = do
+    -- recv sock 4096
     sendAll sock msg
     sClose sock
 
-msg = "HTTP/1.0 200 OK\r\nContent-Length: 5\r\n\r\nPong!\r\n"
+msg = "HTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 7\r\n\r\nPong!\r\n"
