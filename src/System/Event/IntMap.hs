@@ -39,26 +39,26 @@
 -- (32 or 64).
 -----------------------------------------------------------------------------
 
-module System.Event.IntMap ( 
+module System.Event.IntMap (
             -- * Map type
               IntMap, Key          -- instance Eq,Show
 
             -- * Query
             , lookup
-            
+
             -- * Construction
             , empty
 
             -- ** Insertion
             , insertLookupWithKey
-            
+
             -- ** Update
             , updateLookupWithKey
             ) where
 
 
 import Prelude hiding (lookup,map,filter,foldr,foldl,null)
-import Data.Bits 
+import Data.Bits
 
 #if __GLASGOW_HASKELL__ >= 503
 import GHC.Exts ( Word(..), Int(..), shiftRL# )
@@ -90,12 +90,12 @@ shiftRL x i   = shiftR x i
 #endif
 
 {--------------------------------------------------------------------
-  Types  
+  Types
 --------------------------------------------------------------------}
 -- | A map of integers to values @a@.
 data IntMap a = Nil
               | Tip {-# UNPACK #-} !Key !a
-              | Bin {-# UNPACK #-} !Prefix {-# UNPACK #-} !Mask !(IntMap a) !(IntMap a) 
+              | Bin {-# UNPACK #-} !Prefix {-# UNPACK #-} !Mask !(IntMap a) !(IntMap a)
 
 type Prefix = Int
 type Mask   = Int
@@ -113,10 +113,10 @@ lookup k t
 lookupN :: Nat -> IntMap a -> Maybe a
 lookupN k t
   = case t of
-      Bin _ m l r 
+      Bin _ m l r
         | zeroN k (natFromInt m) -> lookupN k l
         | otherwise              -> lookupN k r
-      Tip kx x 
+      Tip kx x
         | (k == natFromInt kx)  -> Just x
         | otherwise             -> Nothing
       Nil -> Nothing
@@ -155,11 +155,11 @@ empty
 insertLookupWithKey :: (Key -> a -> a -> a) -> Key -> a -> IntMap a -> (Maybe a, IntMap a)
 insertLookupWithKey f k x t
   = case t of
-      Bin p m l r 
+      Bin p m l r
         | nomatch k p m -> (Nothing,join k (Tip k x) p t)
         | zero k m      -> let (found,l') = insertLookupWithKey f k x l in (found,Bin p m l' r)
         | otherwise     -> let (found,r') = insertLookupWithKey f k x r in (found,Bin p m l r')
-      Tip ky y 
+      Tip ky y
         | k==ky         -> (Just y,Tip k (f k x y))
         | otherwise     -> (Nothing,join k (Tip k x) ky t)
       Nil -> (Nothing,Tip k x)
@@ -172,11 +172,11 @@ insertLookupWithKey f k x t
 updateLookupWithKey ::  (Key -> a -> Maybe a) -> Key -> IntMap a -> (Maybe a,IntMap a)
 updateLookupWithKey f k t
   = case t of
-      Bin p m l r 
+      Bin p m l r
         | nomatch k p m -> (Nothing,t)
         | zero k m      -> let (found,l') = updateLookupWithKey f k l in (found,bin p m l' r)
         | otherwise     -> let (found,r') = updateLookupWithKey f k r in (found,bin p m l r')
-      Tip ky y 
+      Tip ky y
         | k==ky         -> case (f k y) of
                              Just y' -> (Just y,Tip ky y')
                              Nothing -> (Just y,Nil)
@@ -184,7 +184,7 @@ updateLookupWithKey f k t
       Nil -> (Nothing,Nil)
 
 {--------------------------------------------------------------------
-  Eq 
+  Eq
 --------------------------------------------------------------------}
 instance Eq a => Eq (IntMap a) where
   t1 == t2  = equal t1 t2
@@ -192,7 +192,7 @@ instance Eq a => Eq (IntMap a) where
 
 equal :: Eq a => IntMap a -> IntMap a -> Bool
 equal (Bin p1 m1 l1 r1) (Bin p2 m2 l2 r2)
-  = (m1 == m2) && (p1 == p2) && (equal l1 l2) && (equal r1 r2) 
+  = (m1 == m2) && (p1 == p2) && (equal l1 l2) && (equal r1 r2)
 equal (Tip kx x) (Tip ky y)
   = (kx == ky) && (x==y)
 equal Nil Nil = True
@@ -200,7 +200,7 @@ equal _   _   = False
 
 nequal :: Eq a => IntMap a -> IntMap a -> Bool
 nequal (Bin p1 m1 l1 r1) (Bin p2 m2 l2 r2)
-  = (m1 /= m2) || (p1 /= p2) || (nequal l1 l2) || (nequal r1 r2) 
+  = (m1 /= m2) || (p1 /= p2) || (nequal l1 l2) || (nequal r1 r2)
 nequal (Tip kx x) (Tip ky y)
   = (kx /= ky) || (x/=y)
 nequal Nil Nil = False
@@ -228,7 +228,7 @@ bin _ _ l Nil = l
 bin _ _ Nil r = r
 bin p m l r   = Bin p m l r
 
-  
+
 {--------------------------------------------------------------------
   Endian independent bit twiddling
 --------------------------------------------------------------------}
@@ -249,7 +249,7 @@ zeroN :: Nat -> Nat -> Bool
 zeroN i m = (i .&. m) == 0
 
 {--------------------------------------------------------------------
-  Big endian operations  
+  Big endian operations
 --------------------------------------------------------------------}
 maskW :: Nat -> Nat -> Prefix
 maskW i m
@@ -258,21 +258,21 @@ maskW i m
 branchMask :: Prefix -> Prefix -> Mask
 branchMask p1 p2
   = intFromNat (highestBitMask (natFromInt p1 `xor` natFromInt p2))
-  
+
 {----------------------------------------------------------------------
   Finding the highest bit (mask) in a word [x] can be done efficiently in
   three ways:
-  * convert to a floating point value and the mantissa tells us the 
-    [log2(x)] that corresponds with the highest bit position. The mantissa 
-    is retrieved either via the standard C function [frexp] or by some bit 
-    twiddling on IEEE compatible numbers (float). Note that one needs to 
-    use at least [double] precision for an accurate mantissa of 32 bit 
+  * convert to a floating point value and the mantissa tells us the
+    [log2(x)] that corresponds with the highest bit position. The mantissa
+    is retrieved either via the standard C function [frexp] or by some bit
+    twiddling on IEEE compatible numbers (float). Note that one needs to
+    use at least [double] precision for an accurate mantissa of 32 bit
     numbers.
   * use bit twiddling, a logarithmic sequence of bitwise or's and shifts (bit).
   * use processor specific assembler instruction (asm).
 
   The most portable way would be [bit], but is it efficient enough?
-  I have measured the cycle counts of the different methods on an AMD 
+  I have measured the cycle counts of the different methods on an AMD
   Athlon-XP 1800 (~ Pentium III 1.8Ghz) using the RDTSC instruction:
 
   highestBitMask: method  cycles
@@ -295,7 +295,7 @@ branchMask p1 p2
 
 {----------------------------------------------------------------------
   [highestBitMask] returns a word where only the highest bit is set.
-  It is found by first setting all bits in lower positions than the 
+  It is found by first setting all bits in lower positions than the
   highest bit and than taking an exclusive or with the original value.
   Allthough the function may look expensive, GHC compiles this into
   excellent C code that subsequently compiled into highly efficient
@@ -356,7 +356,7 @@ prop_InsertDelete :: Key -> Int -> IntMap Int -> Property
 prop_InsertDelete k x t
   = not (member k t) ==> delete k (insert k x t) == t
 
-prop_UpdateDelete :: Key -> IntMap Int -> Bool  
+prop_UpdateDelete :: Key -> IntMap Int -> Bool
 prop_UpdateDelete k t
   = update (const Nothing) k t == delete k t
 
@@ -379,12 +379,12 @@ prop_UnionComm t1 t2
 
 prop_Diff :: [(Key,Int)] -> [(Key,Int)] -> Bool
 prop_Diff xs ys
-  =  List.sort (keys (difference (fromListWith (+) xs) (fromListWith (+) ys))) 
+  =  List.sort (keys (difference (fromListWith (+) xs) (fromListWith (+) ys)))
     == List.sort ((List.\\) (nub (Prelude.map fst xs))  (nub (Prelude.map fst ys)))
 
 prop_Int :: [(Key,Int)] -> [(Key,Int)] -> Bool
 prop_Int xs ys
-  =  List.sort (keys (intersection (fromListWith (+) xs) (fromListWith (+) ys))) 
+  =  List.sort (keys (intersection (fromListWith (+) xs) (fromListWith (+) ys)))
     == List.sort (nub ((List.intersect) (Prelude.map fst xs)  (Prelude.map fst ys)))
 
 {--------------------------------------------------------------------
@@ -392,7 +392,7 @@ prop_Int xs ys
 --------------------------------------------------------------------}
 prop_Ordered
   = forAll (choose (5,100)) $ \n ->
-    let xs = concat [[(x-n,()),(x-n,())] | x <- [0..2*n::Int]] 
+    let xs = concat [[(x-n,()),(x-n,())] | x <- [0..2*n::Int]]
     in fromAscList xs == fromList xs
 
 prop_List :: [Key] -> Bool
@@ -401,7 +401,7 @@ prop_List xs
 
 
 {--------------------------------------------------------------------
-  updateMin / updateMax 
+  updateMin / updateMax
 --------------------------------------------------------------------}
 prop_UpdateMinMax :: [Key] -> Bool
 prop_UpdateMinMax xs =
