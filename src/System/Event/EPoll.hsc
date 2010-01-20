@@ -54,6 +54,7 @@ modifyFd :: EPoll -> Fd -> E.Event -> E.Event -> IO ()
 modifyFd ep fd oevt nevt = with (Event (fromEvent nevt) fd) $
                            epollControl (epollFd ep) op fd
   where op | oevt == mempty = controlOpAdd
+           | nevt == mempty = controlOpDelete
            | otherwise      = controlOpModify
 
 poll :: EPoll                        -- ^ state
@@ -61,19 +62,16 @@ poll :: EPoll                        -- ^ state
      -> (Fd -> E.Event -> IO ()) -- ^ I/O callback
      -> IO ()
 poll ep timeout f = do
-    let epfd   = epollFd   ep
-    let events = epollEvents ep
+  let events = epollEvents ep
 
-    n <- A.unsafeLoad events $ \es cap ->
-         epollWait epfd es cap $ fromTimeout timeout
+  n <- A.unsafeLoad events $ \es cap ->
+       epollWait (epollFd ep) es cap $ fromTimeout timeout
 
-    if n == 0 then
-        return ()
-      else do
-        cap <- A.capacity events
-        when (n == cap) $ A.ensureCapacity events (2 * cap)
+  when (n > 0) $ do
+    A.forM_ events $ \e -> f (eventFd e) (toEvent (eventTypes e))
 
-        A.forM_ events $ \e -> f (eventFd e) (toEvent (eventTypes e))
+    cap <- A.capacity events
+    when (cap == n) $ A.ensureCapacity events (2 * cap)
 
 newtype EPollFd = EPollFd CInt
 
