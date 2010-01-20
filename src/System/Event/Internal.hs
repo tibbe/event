@@ -11,7 +11,7 @@ module System.Event.Internal
     ) where
 
 import Data.Bits ((.|.), (.&.))
-import Data.List (foldl')
+import Data.List (foldl', intercalate)
 import Data.Monoid (Monoid(..))
 import Foreign.C.Error (eINTR, getErrno, throwErrno)
 import Foreign.C.Types (CInt)
@@ -37,8 +37,8 @@ eventIs :: Event -> Event -> Bool
 eventIs (Event a) (Event b) = a .&. b /= 0
 
 instance Show Event where
-    show e = show . filter (not . null) $
-             [evtRead `so` "evtRead", evtWrite `so` "evtWrite"]
+    show e = '[' : (intercalate "," . filter (not . null) $
+                    [evtRead `so` "evtRead", evtWrite `so` "evtWrite"]) ++ "]"
         where ev `so` disp | e `eventIs` ev = disp
                            | otherwise      = ""
 
