@@ -13,11 +13,10 @@ module System.Event
     , evtRead
     , evtWrite
     , IOCallback
-    , FdRegistration
+    , FdKey(keyFd)
     , registerFd
     , unregisterFd
     , fdWasClosed
-    , regFd
 
       -- * Registering interest in timeout events
     , TimeoutCallback

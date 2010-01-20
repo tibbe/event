@@ -16,8 +16,7 @@ module System.Event.Manager
     , evtRead
     , evtWrite
     , IOCallback
-    , FdRegistration
-    , regFd
+    , FdKey(keyFd)
     , registerFd_
     , registerFd
     , unregisterFd_
@@ -67,19 +66,19 @@ import qualified System.Event.Poll   as Poll
 -- Types
 
 data FdData = FdData {
-      fdReg       :: {-# UNPACK #-} !FdRegistration
+      fdKey       :: {-# UNPACK #-} !FdKey
     , fdEvents    :: {-# UNPACK #-} !Event
     , _fdCallback :: {-# UNPACK #-} !IOCallback
     }
 
 -- | A file descriptor registration cookie.
-data FdRegistration = FdRegistration {
-      regFd     :: {-# UNPACK #-} !Fd
-    , regUnique :: {-# UNPACK #-} !Unique
+data FdKey = FdKey {
+      keyFd     :: {-# UNPACK #-} !Fd
+    , keyUnique :: {-# UNPACK #-} !Unique
     } deriving (Eq, Show)
 
 -- | Callback invoked on I/O events.
-type IOCallback = FdRegistration -> Event -> IO ()
+type IOCallback = FdKey -> Event -> IO ()
 
 type TimeRep         = Double
 type TimeoutKey      = Unique
@@ -100,9 +99,9 @@ data EventManager = forall a. Backend a => EventManager
 ------------------------------------------------------------------------
 -- Creation
 
-handleControlEvent :: EventManager -> FdRegistration -> Event -> IO ()
+handleControlEvent :: EventManager -> FdKey -> Event -> IO ()
 handleControlEvent mgr reg _evt = do
-  msg <- readControlMessage (emControl mgr) (regFd reg)
+  msg <- readControlMessage (emControl mgr) (keyFd reg)
   case msg of
     CMsgWakeup -> return ()
     CMsgDie    -> writeIORef (emKeepRunning mgr) False
@@ -172,17 +171,19 @@ loop mgr@EventManager{..} = go
 
 -- | Register interest in the given events, without waking the event
 -- manager thread.  The 'Bool' return value indicates whether the
--- event manager needs to be woken.
+-- event manager ought to be woken.
 registerFd_ :: EventManager -> IOCallback -> Fd -> Event
-            -> IO (FdRegistration, Bool)
+            -> IO (FdKey, Bool)
 registerFd_ EventManager{..} cb fd evs = do
   u <- newUnique emUniqueSource
   modifyMVar emFds $ \oldMap -> do
-    let fd' = fromIntegral fd
-        reg = FdRegistration fd u
-        (!newMap, (oldEvs, newEvs)) = case IM.insertLookupWithKey (const (++)) fd' [FdData reg evs cb] oldMap of
-                             (Nothing,   n) -> (n, (mempty, evs))
-                             (Just prev, n) -> (n, pairEvents prev newMap fd')
+    let fd'  = fromIntegral fd
+        reg  = FdKey fd u
+        !fdd = FdData reg evs cb
+        (!newMap, (oldEvs, newEvs)) =
+            case IM.insertLookupWithKey (const (++)) fd' [fdd] oldMap of
+              (Nothing,   n) -> (n, (mempty, evs))
+              (Just prev, n) -> (n, pairEvents prev newMap fd')
         modify = oldEvs /= newEvs
     when modify $ I.modifyFd emBackend fd oldEvs newEvs
     return (newMap, (reg, modify))
@@ -191,7 +192,7 @@ registerFd_ EventManager{..} cb fd evs = do
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
 -- on the file descriptor @fd@.  @cb@ is called for each event that
 -- occurs.  Returns a cookie that can be handed to 'unregisterFd'.
-registerFd :: EventManager -> IOCallback -> Fd -> Event -> IO FdRegistration
+registerFd :: EventManager -> IOCallback -> Fd -> Event -> IO FdKey
 registerFd mgr cb fd evs = do
   (r, wake) <- registerFd_ mgr cb fd evs
   when wake $ wakeManager mgr
@@ -214,11 +215,11 @@ pairEvents prev m fd = let !l = eventsOf prev
 
 -- | Drop a previous file descriptor registration, without waking the
 -- event manager thread.  The return value indicates whether the event
--- manager needs to be woken.
-unregisterFd_ :: EventManager -> FdRegistration -> IO Bool
-unregisterFd_ EventManager{..} (FdRegistration fd u) =
+-- manager ought to be woken.
+unregisterFd_ :: EventManager -> FdKey -> IO Bool
+unregisterFd_ EventManager{..} (FdKey fd u) =
   modifyMVar emFds $ \oldMap -> do
-    let dropReg _ cbs = case filter ((/= u) . regUnique . fdReg) cbs of
+    let dropReg _ cbs = case filter ((/= u) . keyUnique . fdKey) cbs of
                           []   -> Nothing
                           cbs' -> Just cbs'
         fd' = fromIntegral fd
@@ -231,7 +232,7 @@ unregisterFd_ EventManager{..} (FdRegistration fd u) =
     return (newMap, modify)
 
 -- | Drop a previous file descriptor registration.
-unregisterFd :: EventManager -> FdRegistration -> IO ()
+unregisterFd :: EventManager -> FdKey -> IO ()
 unregisterFd mgr reg = do
   wake <- unregisterFd_ mgr reg
   when wake $ wakeManager mgr
