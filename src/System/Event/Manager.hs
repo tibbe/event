@@ -39,7 +39,7 @@ module System.Event.Manager
 import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar, readMVar)
 import Control.Monad (forM_, when)
 import Data.IORef (IORef, atomicModifyIORef, newIORef, readIORef, writeIORef)
-import Data.Monoid (Monoid(..))
+import Data.Monoid (mconcat, mempty)
 import System.Posix.Types (Fd)
 
 import System.Event.Clock (getCurrentTime)
@@ -65,34 +65,11 @@ import qualified System.Event.Poll   as Poll
 ------------------------------------------------------------------------
 -- Types
 
-data FdData = FdNil
-            | FdData {
-                fdUnique   :: {-# UNPACK #-} !Unique
-              , fdEvents   :: {-# UNPACK #-} !Event
-              , _fdCallback :: {-# UNPACK #-} !IOCallback
-              , fdNext :: FdData
-              }
-
-instance Monoid FdData where
-    mempty  = FdNil
-    mappend = fdAppend
-
-fdAppend :: FdData -> FdData -> FdData
-fdAppend FdNil ys = ys
-fdAppend fd@FdData{fdNext=fds} ys = fd{fdNext=fdAppend fds ys}
-
-fdData :: Unique -> Event -> IOCallback -> FdData
-fdData u e cb = FdData u e cb FdNil
-
-fdFilter :: (FdData -> Bool) -> FdData -> FdData
-fdFilter p fd@FdData{fdNext=fds}
-    | p fd      = fd{fdNext=fdFilter p fds}
-    | otherwise = fdFilter p fds
-fdFilter _ fd@FdNil = fd
-
-fdForM_ :: FdData -> (FdData -> IO a) -> IO ()
-fdForM_ FdNil                 _ = return ()
-fdForM_ fd@FdData{fdNext=fds} f = f fd >> fdForM_ fds f
+data FdData = FdData {
+      fdUnique   :: {-# UNPACK #-} !Unique
+    , fdEvents   :: {-# UNPACK #-} !Event
+    , _fdCallback :: {-# UNPACK #-} !IOCallback
+    }
 
 -- | Callback invoked on I/O events.
 type IOCallback = Fd -> Event -> IO ()
@@ -106,7 +83,7 @@ type TimeoutCallback = IO ()
 -- | The event manager state.
 data EventManager = forall a. Backend a => EventManager
     { emBackend      :: !a
-    , emFds          :: !(MVar (IM.IntMap FdData))
+    , emFds          :: !(MVar (IM.IntMap [FdData]))
     , emTimeouts     :: !(IORef (Q.PSQ TimeoutCallback))
     , emKeepRunning  :: !(IORef Bool)
     , emUniqueSource :: !UniqueSource
@@ -201,7 +178,7 @@ registerFd_ EventManager{..} cb fd evs = do
   u <- newUnique emUniqueSource
   modifyMVar emFds $ \oldMap -> do
     let fd' = fromIntegral fd
-        (!newMap, (oldEvs, newEvs)) = case IM.insertLookupWithKey (const mappend) fd' (fdData u evs cb) oldMap of
+        (!newMap, (oldEvs, newEvs)) = case IM.insertLookupWithKey (const (++)) fd' [FdData u evs cb] oldMap of
                              (Nothing,   n) -> (n, (mempty, evs))
                              (Just prev, n) -> (n, pairEvents prev newMap fd')
         modify = oldEvs /= newEvs
@@ -224,12 +201,10 @@ registerFd mgr cb fd evs = do
 wakeManager :: EventManager -> IO ()
 wakeManager mgr = sendWakeup (emControl mgr)
 
-eventsOf :: FdData -> Event
-eventsOf = go mempty
-    where go !acc FdNil = acc
-          go !acc FdData{fdEvents=e,fdNext=xs} = go (acc `mappend` e) xs
+eventsOf :: [FdData] -> Event
+eventsOf = mconcat . map fdEvents
 
-pairEvents :: FdData -> IM.IntMap FdData -> Int -> (Event, Event)
+pairEvents :: [FdData] -> IM.IntMap [FdData] -> Int -> (Event, Event)
 pairEvents prev m fd = let !l = eventsOf prev
                            !r = case IM.lookup fd m of
                                   Nothing  -> mempty
@@ -242,9 +217,9 @@ pairEvents prev m fd = let !l = eventsOf prev
 unregisterFd_ :: EventManager -> FdRegistration -> IO Bool
 unregisterFd_ EventManager{..} (FdRegistration fd u) =
   modifyMVar emFds $ \oldMap -> do
-    let dropReg _ fds = case fdFilter ((/= u) . fdUnique) fds of
-                          FdNil   -> Nothing
-                          fds' -> Just fds'
+    let dropReg _ cbs = case filter ((/= u) . fdUnique) cbs of
+                          []   -> Nothing
+                          cbs' -> Just cbs'
         fd' = fromIntegral fd
         (!newMap, (oldEvs, newEvs)) = case IM.updateLookupWithKey dropReg fd' oldMap of
                                        (Nothing,   _)   -> (oldMap, (mempty, mempty))
@@ -307,6 +282,6 @@ onFdEvent :: EventManager -> Fd -> Event -> IO ()
 onFdEvent mgr fd evs = do
     fds <- readMVar (emFds mgr)
     case IM.lookup (fromIntegral fd) fds of
-        Just cbs -> fdForM_ cbs $ \(FdData _ ev cb _) ->
+        Just cbs -> forM_ cbs $ \(FdData _ ev cb) ->
                       when (evs `I.eventIs` ev) $ cb fd evs
         Nothing  -> return ()
