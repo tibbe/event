@@ -16,7 +16,7 @@ import GHC.Conc (TVar, ThreadId, ThreadStatus(..), atomically, forkIO, newTVar,
                  threadStatus, writeTVar)
 import qualified GHC.Conc as Conc
 import System.Event.Manager (Event, EventManager, evtRead, evtWrite, loop,
-                             new, registerFd, unregisterFd__, registerTimeout)
+                             new, registerFd, unregisterFd, registerTimeout)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Types (Fd)
 
@@ -76,7 +76,7 @@ threadWait evt fd = do
   Running mgr <- readIORef eventManager
   reg <- registerFd mgr (\_ _ -> putMVar m ()) fd evt
   takeMVar m
-  _ <- unregisterFd__ mgr reg
+  _ <- unregisterFd mgr reg
   return ()
 
 eventManager :: IORef (Managing EventManager)
