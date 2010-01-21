@@ -3,10 +3,15 @@
 -- Benchmark 'threadDelay' by forking N threads which sleep for a
 -- number of milliseconds and wait for them all to finish.
 
+import Args (ljust, parseArgs, positive, theLast)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Monad (when)
+import Data.Function (on)
+import Data.Monoid (Monoid(..), Last(..))
 import Data.IORef (atomicModifyIORef, newIORef)
+import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
+import System.Environment (getArgs)
 import System.Event.Thread (ensureIOManagerIsRunning)
 
 #if 1
@@ -16,10 +21,12 @@ import Control.Concurrent (threadDelay)
 #endif
 
 main = do
+    (cfg, _) <- parseArgs defaultConfig defaultOptions =<< getArgs
+    let numThreads = theLast cfgNumThreads cfg
+
     ensureIOManagerIsRunning
     done <- newEmptyMVar
     ref <- newIORef 0
-    let numThreads = 20000
     let loop :: Int -> IO ()
         loop i = do
             when (i < numThreads) $ do
@@ -30,3 +37,33 @@ main = do
                 loop (i + 1)
     loop 0
     takeMVar done
+
+------------------------------------------------------------------------
+-- Configuration
+
+data Config = Config {
+      cfgNumThreads :: Last Int
+    }
+
+defaultConfig :: Config
+defaultConfig = Config
+    { cfgNumThreads    = ljust 1000
+    }
+
+instance Monoid Config where
+    mempty = Config
+        { cfgNumThreads    = mempty
+        }
+
+    mappend a b = Config
+        { cfgNumThreads = app cfgNumThreads a b
+        }
+      where app = on mappend
+
+defaultOptions :: [OptDescr (IO Config)]
+defaultOptions = [
+      Option ['n'] ["threads"]
+          (ReqArg (positive "number of threads" $ \n ->
+               mempty { cfgNumThreads = n }) "N")
+          "number of threads"
+    ]

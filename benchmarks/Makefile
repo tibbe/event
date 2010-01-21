@@ -16,7 +16,7 @@ simple: $(lib) Args.o Simple.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
-thread-delay: $(lib) ThreadDelay.o
+thread-delay: $(lib) Args.o ThreadDelay.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
