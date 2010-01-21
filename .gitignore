@@ -23,6 +23,7 @@ TAGS
 *.tix
 *.orig
 benchmarks/simple
+benchmarks/thread-delay
 benchmarks/timers
 benchmarks/pong
 tests/tests
