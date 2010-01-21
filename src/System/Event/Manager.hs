@@ -181,7 +181,7 @@ registerFd_ EventManager{..} cb fd evs = do
         reg  = FdKey fd u
         !fdd = FdData reg evs cb
         (!newMap, (oldEvs, newEvs)) =
-            case IM.insertLookupWithKey (const (++)) fd' [fdd] oldMap of
+            case IM.insertWith (++) fd' [fdd] oldMap of
               (Nothing,   n) -> (n, (mempty, evs))
               (Just prev, n) -> (n, pairEvents prev newMap fd')
         modify = oldEvs /= newEvs
@@ -219,12 +219,12 @@ pairEvents prev m fd = let !l = eventsOf prev
 unregisterFd_ :: EventManager -> FdKey -> IO Bool
 unregisterFd_ EventManager{..} (FdKey fd u) =
   modifyMVar emFds $ \oldMap -> do
-    let dropReg _ cbs = case filter ((/= u) . keyUnique . fdKey) cbs of
+    let dropReg cbs = case filter ((/= u) . keyUnique . fdKey) cbs of
                           []   -> Nothing
                           cbs' -> Just cbs'
         fd' = fromIntegral fd
         (!newMap, (oldEvs, newEvs)) =
-            case IM.updateLookupWithKey dropReg fd' oldMap of
+            case IM.updateWith dropReg fd' oldMap of
               (Nothing,   _)    -> (oldMap, (mempty, mempty))
               (Just prev, newm) -> (newm, pairEvents prev newm fd')
         modify = oldEvs /= newEvs
@@ -241,7 +241,7 @@ unregisterFd mgr reg = do
 fdWasClosed :: EventManager -> Fd -> IO ()
 fdWasClosed mgr fd =
   modifyMVar_ (emFds mgr) $ \oldMap ->
-    case IM.updateLookupWithKey (\ _ _ -> Nothing) (fromIntegral fd) oldMap of
+    case IM.delete (fromIntegral fd) oldMap of
       (Nothing,  _)       -> return oldMap
       (Just fds, !newMap) -> do
         when (eventsOf fds /= mempty) $ wakeManager mgr

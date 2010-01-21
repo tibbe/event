@@ -3,6 +3,7 @@ syntax: glob
 *~
 *\#
 autom4te.cache
+benchmarks/IntMap
 benchmarks/PSQ
 benchmarks/Simple
 config.log

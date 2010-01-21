@@ -52,10 +52,11 @@ module System.Event.IntMap
     , empty
 
     -- * Insertion
-    , insertLookupWithKey
+    , insertWith
 
-    -- * Update
-    , updateLookupWithKey
+    -- * Delete\/Update
+    , delete
+    , updateWith
     ) where
 
 import Prelude hiding (lookup, map, filter, foldr, foldl, null)
@@ -134,43 +135,57 @@ empty = Nil
 ------------------------------------------------------------------------
 -- Insert
 
--- | /O(min(n,W))/ The expression (@'insertLookupWithKey' f k x map@)
--- is a pair where the first element is equal to (@'lookup' k map@)
--- and the second element equal to (@'insertWithKey' f k x map@).
---
--- > let f key new_value old_value = (show key) ++ ":" ++ new_value ++ "|" ++ old_value
--- > insertLookupWithKey f 5 "xxx" (fromList [(5,"a"), (3,"b")]) == (Just "a", fromList [(3, "b"), (5, "5:xxx|a")])
--- > insertLookupWithKey f 7 "xxx" (fromList [(5,"a"), (3,"b")]) == (Nothing,  fromList [(3, "b"), (5, "a"), (7, "xxx")])
--- > insertLookupWithKey f 5 "xxx" empty                         == (Nothing,  singleton 5 "xxx")
-insertLookupWithKey :: (Key -> a -> a -> a) -> Key -> a -> IntMap a
-                    -> (Maybe a, IntMap a)
-insertLookupWithKey f k x t = case t of
+-- | /O(min(n,W))/ Insert with a function, combining new value and old
+-- value.  @insertWith f key value mp@ will insert the pair (key,
+-- value) into @mp@ if key does not exist in the map.  If the key does
+-- exist, the function will insert the pair (key, f new_value
+-- old_value).  The result is a pair where the first element is the
+-- old value, if one was present, and the second is the modified map.
+insertWith :: (a -> a -> a) -> Key -> a -> IntMap a -> (Maybe a, IntMap a)
+insertWith f k x t = case t of
     Bin p m l r
         | nomatch k p m -> (Nothing, join k (Tip k x) p t)
-        | zero k m      -> let (found, l') = insertLookupWithKey f k x l
+        | zero k m      -> let (found, l') = insertWith f k x l
                            in (found, Bin p m l' r)
-        | otherwise     -> let (found, r') = insertLookupWithKey f k x r
+        | otherwise     -> let (found, r') = insertWith f k x r
                            in (found, Bin p m l r')
     Tip ky y
-        | k == ky       -> (Just y, Tip k (f k x y))
+        | k == ky       -> (Just y, Tip k (f x y))
         | otherwise     -> (Nothing, join k (Tip k x) ky t)
     Nil                 -> (Nothing, Tip k x)
 
 
 ------------------------------------------------------------------------
--- Update
+-- Delete/Update
 
-updateLookupWithKey :: (Key -> a -> Maybe a) -> Key -> IntMap a
-                    -> (Maybe a, IntMap a)
-updateLookupWithKey f k t = case t of
+-- | /O(min(n,W))/. Delete a key and its value from the map.  When the
+-- key is not a member of the map, the original map is returned.  The
+-- result is a pair where the first element is the value associated
+-- with the deleted key, if one existed, and the second element is the
+-- modified map.
+delete :: Key -> IntMap a -> (Maybe a, IntMap a)
+delete k t = case t of
+   Bin p m l r
+        | nomatch k p m -> (Nothing, t)
+        | zero k m      -> let (found, l') = delete k l
+                           in (found, bin p m l' r)
+        | otherwise     -> let (found, r') = delete k r
+                           in (found, bin p m l r')
+   Tip ky y
+        | k == ky       -> (Just y, Nil)
+        | otherwise     -> (Nothing, t)
+   Nil                  -> (Nothing, Nil)
+
+updateWith :: (a -> Maybe a) -> Key -> IntMap a -> (Maybe a, IntMap a)
+updateWith f k t = case t of
     Bin p m l r
         | nomatch k p m -> (Nothing, t)
-        | zero k m      -> let (found, l') = updateLookupWithKey f k l
+        | zero k m      -> let (found, l') = updateWith f k l
                            in (found, bin p m l' r)
-        | otherwise     -> let (found, r') = updateLookupWithKey f k r
+        | otherwise     -> let (found, r') = updateWith f k r
                            in (found, bin p m l r')
     Tip ky y
-        | k == ky       -> case (f k y) of
+        | k == ky       -> case (f y) of
                                Just y' -> (Just y, Tip ky y')
                                Nothing -> (Just y, Nil)
         | otherwise     -> (Nothing, t)
