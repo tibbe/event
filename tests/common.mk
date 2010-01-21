@@ -2,7 +2,7 @@ package := event
 version := $(shell awk '/^version:/{print $$2}' ../$(package).cabal)
 ghc := ghc
 ghc-opt-flags ?= -O0
-ghc-base-flags := -funbox-strict-fields -package criterion \
+ghc-base-flags := -funbox-strict-fields \
 	-package bytestring -ignore-package $(package) \
 	-fno-ignore-asserts
 ghc-base-flags += -Wall -fno-warn-orphans -fno-warn-missing-signatures

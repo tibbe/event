@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface #-}
 
 -- | Socket functions using System.Event instead of GHC's I/O manager.
 module EventSocket
@@ -25,6 +25,7 @@ import GHC.IOBase (IOErrorType(..), IOException(..))
 import Network.Socket (SockAddr, Socket(..), SocketStatus(..))
 import Network.Socket.Internal
 import System.Event.Thread
+import System.IO.Error (ioeSetErrorString, mkIOError)
 import System.Posix.Internals
 
 recv :: Socket -> Int -> IO ByteString
@@ -84,7 +85,11 @@ accept sock@(MkSocket s family stype protocol status) = do
         new_sock <- throwSocketErrorIfMinus1RetryMayBlock "accept"
                     (threadWaitRead (fromIntegral s)) $
                     c_accept s sockaddr ptr_len
+#if __GLASGOW_HASKELL__ > 611
+        setNonBlockingFD new_sock True
+#else
         setNonBlockingFD new_sock
+#endif
         addr <- peekSockAddr sockaddr
         new_status <- newMVar Connected
         return (MkSocket new_sock family stype protocol new_status, addr)
@@ -111,9 +116,10 @@ throwErrnoIfMinus1Retry_repeatOnBlock name on_block act = do
   where repeat = throwErrnoIfMinus1Retry_repeatOnBlock name on_block act
 
 mkInvalidRecvArgError :: String -> IOError
-mkInvalidRecvArgError loc = IOError Nothing
-                                    InvalidArgument
-                                    loc "non-positive length" Nothing
+mkInvalidRecvArgError loc = ioeSetErrorString (mkIOError
+				               InvalidArgument
+                                               loc Nothing Nothing)
+                            "non-positive length"
 
 foreign import ccall unsafe "sys/socket.h accept"
     c_accept :: CInt -> Ptr SockAddr -> Ptr CInt{-CSockLen???-} -> IO CInt
