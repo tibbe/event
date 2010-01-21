@@ -5,7 +5,7 @@ include ../tests/common.mk
 ghc-bench-flags := -package network -package network-bytestring
 
 .PHONY: all
-all: pong simple timers
+all: pong simple thread-delay timers
 
 pong: ghc-flags += $(ghc-bench-flags)
 pong: $(lib) EventSocket.o PongServer.o
@@ -30,4 +30,4 @@ timers: $(lib) Args.o Timers.o
 .PHONY: clean
 clean:
 	-find . \( -name '*.o' -o -name '*.hi' \) -exec rm {} \;
-	-rm -f simple
+	-rm -f pong simple thread-delay timers

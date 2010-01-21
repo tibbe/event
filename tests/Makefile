@@ -13,5 +13,5 @@ tests: $(lib) System/Event/Array/Tests.o System/Event/PSQ/Tests.o RunTests.o
 	$(ghc) $(ghc-flags) $(ghc-opt-flags) -c -o $@ $<
 
 clean:
-	-find . \( -name '*.o' -o -name '*.hi' \) -print0 | xargs -0r rm
+	-find . \( -name '*.o' -o -name '*.hi' \) -exec rm {} \;
 	-rm -f tests
