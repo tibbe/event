@@ -58,12 +58,12 @@ new :: IO EventQueue
 new = liftM3 EventQueue kqueue (newMVar =<< A.empty) (A.new 64)
 
 modifyFd :: EventQueue -> Fd -> E.Event -> E.Event -> IO ()
-modifyFd q fd _oevt nevt = withMVar (eqChanges q) $ \ch ->
-    case undefined of
-      _ | nevt `E.eventIs` E.evtRead  -> addChange ch filterRead
-        | nevt `E.eventIs` E.evtWrite -> addChange ch filterWrite
-        | otherwise                   -> error $ "set: bad event " ++ show nevt
-  where addChange ch filt = A.snoc ch $ event fd filt flagAdd noteEOF
+modifyFd q fd oevt nevt = withMVar (eqChanges q) $ \ch -> do
+  let addChange filt flag = A.snoc ch $ event fd filt flag noteEOF
+  when (oevt `E.eventIs` E.evtRead)  $ addChange filterRead flagDelete
+  when (oevt `E.eventIs` E.evtWrite) $ addChange filterWrite flagDelete
+  when (nevt `E.eventIs` E.evtRead)  $ addChange filterRead flagAdd
+  when (nevt `E.eventIs` E.evtWrite) $ addChange filterWrite flagAdd
 
 poll :: EventQueue
      -> Timeout
