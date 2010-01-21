@@ -38,7 +38,7 @@ library
     System.Event.Unique
 
   build-depends:
-    base < 5,
+    base >= 4 && < 5,
     ghc-prim
 
   ghc-prof-options: -auto-all
