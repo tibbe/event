@@ -151,14 +151,15 @@ loop :: EventManager -> IO ()
 loop mgr@EventManager{..} = go
   where
     go = do
-      timeout <- mkTimeout =<< getCurrentTime
+      timeout <- mkTimeout
       I.poll emBackend timeout (onFdEvent mgr)
       flip when go =<< readIORef emKeepRunning
 
     -- | Call all expired timer callbacks and return the time to the
     -- next timeout.
-    mkTimeout :: TimeRep -> IO Timeout
-    mkTimeout now = do
+    mkTimeout :: IO Timeout
+    mkTimeout = do
+        now <- getCurrentTime
         (expired, q') <- atomicModifyIORef emTimeouts $ \q ->
             let res@(_, q') = Q.atMost now q in (q', res)
         sequence_ $ map Q.value expired
