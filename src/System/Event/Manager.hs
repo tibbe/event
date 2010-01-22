@@ -166,7 +166,7 @@ loop mgr@EventManager{..} = go
         case Q.minView q' of
             Nothing             -> return Forever
             Just (Q.E _ t _, _) ->
-                return $! Timeout (ceiling $ (t - now) * 1000)
+                return $! Timeout (max 0 . ceiling $ (t - now) * 1000)
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
