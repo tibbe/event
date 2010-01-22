@@ -30,7 +30,7 @@ main = do
     let loop :: Int -> IO ()
         loop i = do
             when (i < numThreads) $ do
-                forkIO $ do threadDelay 1
+                forkIO $ do threadDelay 1000
                             a <- atomicModifyIORef ref $ \a ->
                                 let !b = a+1 in (b,b)
                             when (a == numThreads) $ putMVar done ()

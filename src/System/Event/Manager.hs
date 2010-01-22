@@ -254,14 +254,16 @@ fdWasClosed mgr fd =
 -- | Register a timeout in the given number of milliseconds.
 registerTimeout :: EventManager -> Int -> TimeoutCallback -> IO TimeoutKey
 registerTimeout mgr ms cb = do
-    now <- getCurrentTime
-    let expTime = fromIntegral ms / 1000.0 + now
-    key <- newUnique (emUniqueSource mgr)
+  key <- newUnique (emUniqueSource mgr)
+  if ms <= 0 then cb
+    else do
+      now <- getCurrentTime
+      let expTime = fromIntegral ms / 1000.0 + now
 
-    atomicModifyIORef (emTimeouts mgr) $ \q ->
-        let !q' = Q.insert key expTime cb q in (q', ())
-    wakeManager mgr
-    return $! TK key
+      atomicModifyIORef (emTimeouts mgr) $ \q ->
+          let !q' = Q.insert key expTime cb q in (q', ())
+      wakeManager mgr
+  return $! TK key
 
 clearTimeout :: EventManager -> TimeoutKey -> IO ()
 clearTimeout mgr (TK key) = do
