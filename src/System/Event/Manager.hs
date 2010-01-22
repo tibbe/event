@@ -81,7 +81,8 @@ data FdKey = FdKey {
 type IOCallback = FdKey -> Event -> IO ()
 
 type TimeRep         = Double
-type TimeoutKey      = Unique
+newtype TimeoutKey   = TK Unique
+    deriving (Eq)
 
 -- | Callback invoked on timeout events.
 type TimeoutCallback = IO ()
@@ -260,16 +261,16 @@ registerTimeout mgr ms cb = do
     atomicModifyIORef (emTimeouts mgr) $ \q ->
         let !q' = Q.insert key expTime cb q in (q', ())
     wakeManager mgr
-    return key
+    return $! TK key
 
 clearTimeout :: EventManager -> TimeoutKey -> IO ()
-clearTimeout mgr key = do
+clearTimeout mgr (TK key) = do
     atomicModifyIORef (emTimeouts mgr) $ \q ->
         let !q' = Q.delete key q in (q', ())
     wakeManager mgr
 
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
-updateTimeout mgr key ms = do
+updateTimeout mgr (TK key) ms = do
     now <- getCurrentTime
     let expTime = fromIntegral ms / 1000.0 + now
 
