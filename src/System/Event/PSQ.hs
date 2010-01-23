@@ -264,15 +264,19 @@ atMost pt q = let (sequ, q') = atMosts pt q
               in (seqToList sequ, q')
 
 atMosts :: Prio -> PSQ a -> (Sequ (Elem a), PSQ a)
-atMosts !pt q =
-    case minView q of
-        Just (e, _) | prio e > pt -> (emptySequ, q)
-        _ -> case tourView q of
-            Null        -> (emptySequ, Void)
-            Single e    -> (singleSequ e, Void)  -- we know that prio b <= pt
-            t `Play` t' -> let (sequ, q') = atMosts pt t
-                               (sequ', q'') = atMosts pt t'
-                           in (sequ <> sequ', q' `play` q'')
+atMosts !pt q = case q of
+    (Winner e t m)
+        | prio e > pt -> (emptySequ, q)
+    Void              -> (emptySequ, Void)
+    Winner e Start _  -> (singleSequ e, Void)
+    Winner e (RLoser _ e' tl m tr) m' ->
+        let (sequ, q')   = atMosts pt (Winner e tl m)
+            (sequ', q'') = atMosts pt (Winner e' tr m')
+        in (sequ <> sequ', q' `play` q'')
+    Winner e (LLoser _ e' tl m tr) m' ->
+        let (sequ, q')   = atMosts pt (Winner e' tl m)
+            (sequ', q'') = atMosts pt (Winner e tr m')
+        in (sequ <> sequ', q' `play` q'')
 
 ------------------------------------------------------------------------
 -- Loser tree
