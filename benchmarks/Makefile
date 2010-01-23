@@ -4,6 +4,10 @@ include ../tests/common.mk
 
 ghc-bench-flags := -package network -package network-bytestring
 
+ifdef USE_GHC_IO_MANAGER
+	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
+endif
+
 .PHONY: all
 all: pong simple thread-delay timers
 
@@ -16,6 +20,7 @@ simple: $(lib) Args.o Simple.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
+thread-delay: ghc-flags += $(ghc-bench-flags)
 thread-delay: $(lib) Args.o ThreadDelay.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)

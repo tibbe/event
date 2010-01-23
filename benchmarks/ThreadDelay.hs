@@ -14,10 +14,10 @@ import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
 import System.Event.Thread (ensureIOManagerIsRunning)
 
-#if 1
-import System.Event.Thread (threadDelay)
-#else
+#ifdef USE_GHC_IO_MANAGER
 import Control.Concurrent (threadDelay)
+#else
+import System.Event.Thread (threadDelay)
 #endif
 
 main = do
