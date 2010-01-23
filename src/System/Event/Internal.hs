@@ -55,8 +55,8 @@ evtConcat :: [Event] -> Event
 evtConcat = foldl' evtCombine evtNothing
 {-# INLINE evtConcat #-}
 
--- | A type alias for timeouts, specified in milliseconds.
-data Timeout = Timeout {-# UNPACK #-} !CInt
+-- | A type alias for timeouts, specified in seconds.
+data Timeout = Timeout {-# UNPACK #-} !Double
              | Forever
                deriving (Show)
 

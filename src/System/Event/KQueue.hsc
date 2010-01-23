@@ -76,7 +76,7 @@ poll EventQueue{..} tout f = do
     when (changesLen > len) $ A.ensureCapacity eqEvents (2 * changesLen)
     n <- A.useAsPtr changes $ \changesPtr chLen ->
            A.unsafeLoad eqEvents $ \evPtr evCap ->
-             withTimeSpec (msToTimeSpec tout) $
+             withTimeSpec (fromTimeout tout) $
                kevent eqFd changesPtr chLen evPtr evCap
 
     if n == 0 then
@@ -247,15 +247,15 @@ withTimeSpec ts f =
       else
         alloca $ \ptr -> poke ptr ts >> f ptr
 
-msToTimeSpec :: Timeout -> TimeSpec
-msToTimeSpec Forever = TimeSpec (-1) (-1)
-msToTimeSpec (Timeout ms) = TimeSpec (toEnum sec) (toEnum nanosec)
+fromTimeout :: Timeout -> TimeSpec
+fromTimeout Forever     = TimeSpec (-1) (-1)
+fromTimeout (Timeout s) = TimeSpec (toEnum sec) (toEnum nanosec)
   where
     sec :: Int
-    sec     = fromEnum $ ms `div` 1000
+    sec     = floor s
 
     nanosec :: Int
-    nanosec = (fromEnum ms - 1000*sec) * 1000000
+    nanosec = ceiling $ (s - fromIntegral sec) * 1000000000
 
 fromEvent :: E.Event -> Filter
 fromEvent e = remap E.evtRead filterRead .|.

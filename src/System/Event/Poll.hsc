@@ -58,8 +58,8 @@ poll p tout f = do
           else return (i, True)
 
 fromTimeout :: E.Timeout -> Int
-fromTimeout E.Forever      = -1
-fromTimeout (E.Timeout ms) = fromIntegral ms
+fromTimeout E.Forever     = -1
+fromTimeout (E.Timeout s) = ceiling $ 1000 * s
 
 data PollFd = PollFd {
       pfdFd      :: {-# UNPACK #-} !Fd

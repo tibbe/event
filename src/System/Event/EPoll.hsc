@@ -156,8 +156,8 @@ toEvent e = remap (epollIn  .|. epollErr .|. epollHup) E.evtRead `mappend`
             | otherwise      = mempty
 
 fromTimeout :: Timeout -> Int
-fromTimeout Forever      = -1
-fromTimeout (Timeout ms) = fromIntegral ms
+fromTimeout Forever     = -1
+fromTimeout (Timeout s) = ceiling $ 1000 * s
 
 #if defined(HAVE_EPOLL_CREATE1)
 foreign import ccall unsafe "sys/epoll.h epoll_create1"

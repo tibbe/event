@@ -168,7 +168,7 @@ loop mgr@EventManager{..} = go
             Just (Q.E _ t _, _) ->
                 -- This value will always be positive since the call
                 -- to 'atMost' above removed any timeouts <= 'now'
-                return $! Timeout (ceiling $ (t - now) * 1000)
+                return $! Timeout (t - now)
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
