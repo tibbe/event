@@ -80,7 +80,6 @@ data FdKey = FdKey {
 -- | Callback invoked on I/O events.
 type IOCallback = FdKey -> Event -> IO ()
 
-type TimeRep         = Double
 newtype TimeoutKey   = TK Unique
     deriving (Eq)
 
