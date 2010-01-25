@@ -2,6 +2,7 @@ module Args
     (
       theLast
     , ljust
+    , nonNegative
     , parseArgs
     , positive
     , printUsage
@@ -34,6 +35,15 @@ parseArgs defCfg options args =
 -- | Constructor for 'Last' values.
 ljust :: a -> Last a
 ljust = Last . Just
+
+-- | Parse a positive number.
+nonNegative :: (Num a, Ord a, Read a) =>
+               String -> (Last a -> cfg) -> String -> IO cfg
+nonNegative q f s =
+    case reads s of
+      [(n,"")] | n >= 0    -> return . f $ ljust n
+               | otherwise -> parseError $ q ++ " must be non negative"
+      _                    -> parseError $ "invalid " ++ q ++ " provided"
 
 -- | Parse a positive number.
 positive :: (Num a, Ord a, Read a) =>
