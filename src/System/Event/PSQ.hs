@@ -187,17 +187,20 @@ delete k q = case q of
 -- of the provided function.  When the key is not a member of the
 -- queue, the original queue is returned.
 adjust :: (Prio -> Prio) -> Key -> PSQ a -> PSQ a
-adjust f k q = case q of
-    Void -> empty
-    Winner (E k' p v) Start _
-        | k == k'   -> singleton k' (f p) v
-        | otherwise -> singleton k' p v
-    Winner e (RLoser _ e' tl m tr) m'
-        | k <= m    -> adjust f k (Winner e tl m) `unsafePlay` (Winner e' tr m')
-        | otherwise -> (Winner e tl m) `unsafePlay` adjust f k (Winner e' tr m')
-    Winner e (LLoser _ e' tl m tr) m'
-        | k <= m    -> adjust f k (Winner e' tl m) `unsafePlay` (Winner e tr m')
-        | otherwise -> (Winner e' tl m) `unsafePlay` adjust f k (Winner e tr m')
+adjust f k q0 =  go q0
+  where
+    go q = case q of
+        Void -> empty
+        Winner (E k' p v) Start _
+            | k == k'   -> singleton k' (f p) v
+            | otherwise -> singleton k' p v
+        Winner e (RLoser _ e' tl m tr) m'
+            | k <= m    -> go (Winner e tl m) `unsafePlay` (Winner e' tr m')
+            | otherwise -> (Winner e tl m) `unsafePlay` go (Winner e' tr m')
+        Winner e (LLoser _ e' tl m tr) m'
+            | k <= m    -> go (Winner e' tl m) `unsafePlay` (Winner e tr m')
+            | otherwise -> (Winner e' tl m) `unsafePlay` go (Winner e tr m')
+{-# INLINE adjust #-}
 
 ------------------------------------------------------------------------
 -- Conversion
