@@ -268,7 +268,7 @@ atMost pt q = let (sequ, q') = atMosts pt q
 
 atMosts :: Prio -> PSQ a -> (Sequ (Elem a), PSQ a)
 atMosts !pt q = case q of
-    (Winner e t m)
+    (Winner e _ _)
         | prio e > pt -> (emptySequ, q)
     Void              -> (emptySequ, Void)
     Winner e Start _  -> (singleSequ e, Void)
