@@ -12,8 +12,8 @@ module System.Event.Thread
 import Control.Concurrent.MVar (MVar, modifyMVar_, newEmptyMVar, newMVar,
                                 putMVar, takeMVar)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import GHC.Conc (TVar, ThreadId, ThreadStatus(..), atomically, forkIO, newTVar,
-                 threadStatus, writeTVar)
+import GHC.Conc (TVar, ThreadId, ThreadStatus(..), atomically, forkIO,
+                 labelThread, newTVar, threadStatus, writeTVar)
 import qualified GHC.Conc as Conc
 import System.Event.Manager (Event, EventManager, evtRead, evtWrite, loop,
                              new, registerFd, unregisterFd_, registerTimeout)
@@ -97,6 +97,7 @@ ensureIOManagerIsRunning
                            return m
   let create = do
         t <- forkIO $ loop mgr
+        labelThread t "IOManager"
         return $! Running t
   case old of
     None                -> create
