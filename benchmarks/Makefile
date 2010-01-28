@@ -12,7 +12,7 @@ endif
 all: pong simple thread-delay timers
 
 pong: ghc-flags += $(ghc-bench-flags)
-pong: $(lib) EventSocket.o PongServer.o
+pong: $(lib) Args.o EventSocket.o PongServer.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
