@@ -6,7 +6,7 @@
 -- number of slow/idle connections to a server.
 
 import Args (ljust, nonNegative, parseArgs, positive, theLast)
-import EventSocket (connect, sendAll, socket)
+import EventSocket (connect, sendAll)
 
 import Control.Monad (replicateM_)
 import Data.ByteString.Char8 ()
