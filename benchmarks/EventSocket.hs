@@ -4,12 +4,13 @@
 module EventSocket
     (
       accept
+    , connect
     , recv
     , send
     , sendAll
     ) where
 
-import Control.Concurrent (newMVar, readMVar)
+import Control.Concurrent (modifyMVar_, newMVar, readMVar)
 import Control.Monad (liftM, when)
 import Data.ByteString (ByteString)
 import Data.ByteString.Internal (createAndTrim)
@@ -20,13 +21,57 @@ import Foreign.C.Types (CChar, CInt, CSize)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr, castPtr)
-import Foreign.C.Error (eINTR, eWOULDBLOCK, eAGAIN, getErrno, throwErrno)
-import GHC.IOBase (IOErrorType(..), IOException(..))
-import Network.Socket (SockAddr, Socket(..), SocketStatus(..))
+import Foreign.C.Error (Errno(..), eINPROGRESS, eINTR, eWOULDBLOCK, eAGAIN,
+                        errnoToIOError, getErrno, throwErrno)
+import GHC.IOBase (IOErrorType(..))
+import Network.Socket hiding (accept, connect, recv, send)
 import Network.Socket.Internal
+import Prelude hiding (repeat)
 import System.Event.Thread
 import System.IO.Error (ioeSetErrorString, mkIOError)
 import System.Posix.Internals
+
+connect :: Socket	-- Unconnected Socket
+	-> SockAddr 	-- Socket address stuff
+	-> IO ()
+connect sock@(MkSocket s _family _stype _protocol socketStatus) addr = do
+ modifyMVar_ socketStatus $ \currentStatus -> do
+ if currentStatus /= NotConnected && currentStatus /= Bound
+  then
+   ioError (userError ("connect: can't peform connect on socket in status " ++
+         show currentStatus))
+  else do
+   withSockAddr addr $ \p_addr sz -> do
+
+   let  connectLoop = do
+       	   r <- c_connect s p_addr (fromIntegral sz)
+       	   if r == -1
+       	       then do
+	       	       err <- getErrno
+		       case () of
+			 _ | err == eINTR       -> connectLoop
+			 _ | err == eINPROGRESS -> connectBlocked
+--			 _ | err == eAGAIN      -> connectBlocked
+			 _                      -> throwSocketError "connect"
+       	       else return r
+
+	connectBlocked = do
+	   threadWaitWrite (fromIntegral s)
+	   err <- getSocketOption sock SoError
+	   if (err == 0)
+	   	then return 0
+	   	else do ioError (errnoToIOError "connect"
+	   			(Errno (fromIntegral err))
+	   			Nothing Nothing)
+
+   connectLoop
+   return Connected
+
+foreign import ccall unsafe "connect"
+  c_connect :: CInt -> Ptr SockAddr -> CInt{-CSockLen???-} -> IO CInt
+
+------------------------------------------------------------------------
+-- Receiving
 
 recv :: Socket -> Int -> IO ByteString
 recv (MkSocket s _ _ _ _) nbytes
