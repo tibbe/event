@@ -11,6 +11,7 @@ import Control.Concurrent (forkIO)
 import Control.Monad (unless)
 import qualified Data.ByteString as S
 import Data.ByteString.Char8 ()
+import qualified Data.ByteString.Char8 as C
 import Data.Function (on)
 import Data.Monoid (Monoid(..), Last(..))
 import Network (PortID(..), listenOn)
@@ -51,7 +52,7 @@ acceptConnections sock = loop
 
 client :: Socket -> IO ()
 client sock = do
-    _ <- recv sock 4096
+    s <- recv sock 4096
     sendAll sock msg
     unless (S.null s) drainSocket
     sClose sock
@@ -60,7 +61,7 @@ client sock = do
         s <- recv sock 1024
         unless (S.null s) drainSocket
 
-msg = "HTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 5\r\n\r\nPong!"
+msg = "HTTP/1.0 200 OK\r\n\r\nPong!"
 
 ------------------------------------------------------------------------
 -- Configuration
