@@ -53,14 +53,14 @@ client :: Socket -> IO ()
 client sock = do
     _ <- recv sock 4096
     sendAll sock msg
-    drainSocket
+    unless (S.null s) drainSocket
     sClose sock
   where
     drainSocket = do
         s <- recv sock 1024
         unless (S.null s) drainSocket
 
-msg = "HTTP/1.0 200 OK\r\n\r\nContent-Length: 5\r\n\r\nPong!\r\n"
+msg = "HTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 5\r\n\r\nPong!"
 
 ------------------------------------------------------------------------
 -- Configuration
