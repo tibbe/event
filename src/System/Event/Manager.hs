@@ -262,8 +262,8 @@ registerTimeout mgr ms cb = do
       now <- getCurrentTime
       let expTime = fromIntegral ms / 1000.0 + now
 
-      atomicModifyIORef (emTimeouts mgr) $ \q ->
-          let !q' = Q.insert key expTime cb q in (q', ())
+      !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
+            let q' = Q.insert key expTime cb q in (q', q')
       wakeManager mgr
   return $! TK key
 
@@ -278,8 +278,8 @@ updateTimeout mgr (TK key) ms = do
     now <- getCurrentTime
     let expTime = fromIntegral ms / 1000.0 + now
 
-    atomicModifyIORef (emTimeouts mgr) $ \q ->
-        let !q' = Q.adjust (const expTime) key q in (q', ())
+    !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
+          let q' = Q.adjust (const expTime) key q in (q', q')
     wakeManager mgr
 
 ------------------------------------------------------------------------
