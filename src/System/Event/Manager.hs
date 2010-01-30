@@ -28,7 +28,7 @@ module System.Event.Manager
     , TimeoutKey
     , registerTimeout
     , updateTimeout
-    , clearTimeout
+    , unregisterTimeout
     ) where
 
 #include "EventConfig.h"
@@ -267,10 +267,10 @@ registerTimeout mgr ms cb = do
       wakeManager mgr
   return $! TK key
 
-clearTimeout :: EventManager -> TimeoutKey -> IO ()
-clearTimeout mgr (TK key) = do
-    atomicModifyIORef (emTimeouts mgr) $ \q ->
-        let !q' = Q.delete key q in (q', ())
+unregisterTimeout :: EventManager -> TimeoutKey -> IO ()
+unregisterTimeout mgr (TK key) = do
+    !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
+          let q' = Q.delete key q in (q', q')
     wakeManager mgr
 
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
