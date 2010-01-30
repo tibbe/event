@@ -17,7 +17,7 @@ extra-tmp-files:
   include/EventConfig.h
 extra-source-files:
   README.md config.guess config.sub install-sh configure.ac configure
-  include/EventConfig.h.in
+  cbits/eventsupport.c include/EventConfig.h.in include/HsEvent.h
 
 library
   exposed-modules:
@@ -35,6 +35,7 @@ library
     System.Event.Manager
     System.Event.PSQ
     System.Event.Poll
+    System.Event.Signal
     System.Event.Unique
 
   build-depends:
@@ -48,6 +49,8 @@ library
 
   hs-source-dirs: src
   include-dirs: include
+  install-includes: EventConfig.h HsEvent.h
+  c-sources: cbits/eventsupport.c
 
 source-repository head
   type:     git

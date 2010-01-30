@@ -14,7 +14,7 @@ AC_ARG_WITH([cc],
             [CC=$withval])
 AC_PROG_CC()
 
-AC_CHECK_HEADERS([poll.h sys/epoll.h sys/event.h sys/eventfd.h])
+AC_CHECK_HEADERS([poll.h signal.h sys/epoll.h sys/event.h sys/eventfd.h])
 
 AC_CHECK_FUNCS([epoll_create1 epoll_ctl eventfd kevent kevent64 kqueue poll])
 
