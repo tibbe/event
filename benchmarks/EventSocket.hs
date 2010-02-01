@@ -10,7 +10,7 @@ module EventSocket
     , sendAll
     ) where
 
-import Control.Concurrent (modifyMVar_, newMVar, readMVar)
+import Control.Concurrent (modifyMVar_, newMVar)
 import Control.Monad (liftM, when)
 import Data.ByteString (ByteString)
 import Data.ByteString.Internal (createAndTrim)
@@ -122,8 +122,7 @@ sendAll sock bs = do
 -- Accepting
 
 accept :: Socket -> IO (Socket, SockAddr)
-accept sock@(MkSocket s family stype protocol status) = do
-    currentStatus <- readMVar status
+accept (MkSocket s family stype protocol _status) = do
     let sz = sizeOfSockAddrByFamily family
     allocaBytes sz $ \ sockaddr -> do
         with (fromIntegral sz) $ \ ptr_len -> do

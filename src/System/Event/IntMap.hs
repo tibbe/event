@@ -47,6 +47,7 @@ module System.Event.IntMap
 
     -- * Query
     , lookup
+    , member
 
     -- * Construction
     , empty
@@ -57,6 +58,13 @@ module System.Event.IntMap
     -- * Delete\/Update
     , delete
     , updateWith
+
+    -- * Traversal
+    -- ** Fold
+    , foldWithKey
+
+    -- * Conversion
+    , keys
     ) where
 
 import Prelude hiding (lookup, map, filter, foldr, foldl, null)
@@ -121,6 +129,17 @@ lookupN k t
         | (k == natFromInt kx)  -> Just x
         | otherwise             -> Nothing
       Nil -> Nothing
+
+-- | /O(min(n,W))/. Is the key a member of the map?
+--
+-- > member 5 (fromList [(5,'a'), (3,'b')]) == True
+-- > member 1 (fromList [(5,'a'), (3,'b')]) == False
+
+member :: Key -> IntMap a -> Bool
+member k m
+  = case lookup k m of
+      Nothing -> False
+      Just _  -> True
 
 ------------------------------------------------------------------------
 -- Construction
@@ -190,6 +209,42 @@ updateWith f k t = case t of
                                Nothing -> (Just y, Nil)
         | otherwise     -> (Nothing, t)
     Nil                 -> (Nothing, Nil)
+-- | /O(n)/. Fold the keys and values in the map, such that
+-- @'foldWithKey' f z == 'Prelude.foldr' ('uncurry' f) z . 'toAscList'@.
+-- For example,
+--
+-- > keys map = foldWithKey (\k x ks -> k:ks) [] map
+--
+-- > let f k a result = result ++ "(" ++ (show k) ++ ":" ++ a ++ ")"
+-- > foldWithKey f "Map: " (fromList [(5,"a"), (3,"b")]) == "Map: (5:a)(3:b)"
+
+foldWithKey :: (Key -> a -> b -> b) -> b -> IntMap a -> b
+foldWithKey f z t
+  = foldr f z t
+
+foldr :: (Key -> a -> b -> b) -> b -> IntMap a -> b
+foldr f z t
+  = case t of
+      Bin 0 m l r | m < 0 -> foldr' f (foldr' f z l) r  -- put negative numbers before.
+      Bin _ _ _ _ -> foldr' f z t
+      Tip k x     -> f k x z
+      Nil         -> z
+
+foldr' :: (Key -> a -> b -> b) -> b -> IntMap a -> b
+foldr' f z t
+  = case t of
+      Bin _ _ l r -> foldr' f (foldr' f z r) l
+      Tip k x     -> f k x z
+      Nil         -> z
+
+-- | /O(n)/. Return all keys of the map in ascending order.
+--
+-- > keys (fromList [(5,"a"), (3,"b")]) == [3,5]
+-- > keys empty == []
+
+keys  :: IntMap a -> [Key]
+keys m
+  = foldWithKey (\k _ ks -> k:ks) [] m
 
 ------------------------------------------------------------------------
 -- Eq

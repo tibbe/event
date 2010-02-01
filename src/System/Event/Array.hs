@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE BangPatterns, CPP, ForeignFunctionInterface #-}
 
 module System.Event.Array
     (
@@ -162,8 +162,10 @@ snoc (Array ref) e = do
     writeIORef ref (AC es len' cap)
 
 clear :: Storable a => Array a -> IO ()
-clear (Array ref) = atomicModifyIORef ref $ \(AC es _ cap) ->
-                    let !e = AC es 0 cap in (e, ())
+clear (Array ref) = do
+  !_ <- atomicModifyIORef ref $ \(AC es _ cap) ->
+        let e = AC es 0 cap in (e, e)
+  return ()
 
 forM_ :: Storable a => Array a -> (a -> IO ()) -> IO ()
 forM_ ary g = forHack ary g undefined

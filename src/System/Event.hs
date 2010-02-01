@@ -23,7 +23,7 @@ module System.Event
     , TimeoutKey
     , registerTimeout
     , updateTimeout
-    , clearTimeout
+    , unregisterTimeout
     ) where
 
 import System.Event.Manager
