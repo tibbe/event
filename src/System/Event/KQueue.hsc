@@ -7,7 +7,7 @@ module System.Event.KQueue where
 #if defined(HAVE_KQUEUE)
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
-import Control.Monad (liftM3, when)
+import Control.Monad (liftM3, when, unless)
 import Data.Bits (Bits(..))
 import Data.Word (Word16, Word32)
 import Foreign.C.Error (throwErrnoIfMinus1)
@@ -79,13 +79,9 @@ poll EventQueue{..} tout f = do
              withTimeSpec (fromTimeout tout) $
                kevent eqFd changesPtr chLen evPtr evCap
 
-    if n == 0 then
-        return ()
-      else do
+    unless (n == 0) $ do
         cap <- A.capacity eqEvents
-        when (n == cap) $
-          A.ensureCapacity eqEvents (2 * cap)
-
+        when (n == cap) $ A.ensureCapacity eqEvents (2 * cap)
         A.forM_ eqEvents $ \e -> f (fromIntegral (ident e)) (toEvent (filter e))
 
 ------------------------------------------------------------------------
@@ -270,15 +266,15 @@ toEvent (Filter f)
     | f == (#const EVFILT_WRITE) = E.evtWrite
     | otherwise = error $ "toEvent: unknonwn filter " ++ show f
 
-foreign import ccall unsafe "sys/event.h kqueue"
+foreign import ccall unsafe "kqueue"
     c_kqueue :: IO CInt
 
 #if defined(HAVE_KEVENT64)
-foreign import ccall safe "sys/event.h kevent64"
+foreign import ccall safe "kevent64"
     c_kevent64 :: QueueFd -> Ptr Event -> CInt -> Ptr Event -> CInt -> CUInt
                -> Ptr TimeSpec -> IO CInt
 #elif defined(HAVE_KEVENT)
-foreign import ccall safe "sys/event.h kevent"
+foreign import ccall safe "kevent"
     c_kevent :: QueueFd -> Ptr Event -> CInt -> Ptr Event -> CInt
              -> Ptr TimeSpec -> IO CInt
 #else

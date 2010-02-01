@@ -11,8 +11,13 @@ endif
 .PHONY: all
 all: pong simple thread-delay timers
 
+dead-conn: ghc-flags += $(ghc-bench-flags)
+dead-conn: $(lib) Args.o EventSocket.o DeadConn.o
+	ranlib $(lib)
+	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
+
 pong: ghc-flags += $(ghc-bench-flags)
-pong: $(lib) EventSocket.o PongServer.o
+pong: $(lib) Args.o EventSocket.o PongServer.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
