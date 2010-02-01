@@ -35,7 +35,8 @@ main = do
   (cfg, _) <- parseArgs defaultConfig defaultOptions =<< getArgs
   let port = theLast cfgPort cfg
       lim  = ResourceLimit . fromIntegral . theLast cfgMaxConns $ cfg
-      myHints = defaultHints { addrFlags = [AI_PASSIVE] }
+      myHints = defaultHints { addrFlags = [AI_PASSIVE]
+                             , addrSocketType = Stream }
   ensureIOManagerIsRunning
   setResourceLimit ResourceOpenFiles
       ResourceLimits { softLimit = lim, hardLimit = lim }
@@ -43,7 +44,7 @@ main = do
   sock <- socket (addrFamily ai) (addrSocketType ai) (addrProtocol ai)
   setSocketOption sock ReuseAddr 1
   bindSocket sock (addrAddress ai)
-  listen sock 1024
+  listen sock maxListenQueue
   acceptConnections cfg sock
 
 acceptConnections :: Config -> Socket -> IO ()
