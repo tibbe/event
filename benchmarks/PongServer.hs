@@ -7,9 +7,8 @@
 
 import Control.Concurrent (forkIO)
 import Data.ByteString.Char8 ()
-import Network (PortID(..), listenOn)
-import Network.Socket (Socket, sClose)
-#if 1
+import Network.Socket hiding (accept, recv)
+#if 0
 import EventSocket (accept, recv, sendAll)
 #else
 import Network.Socket (accept)
@@ -18,9 +17,14 @@ import Network.Socket.ByteString (recv, sendAll)
 import System.Event.Thread (ensureIOManagerIsRunning)
 
 main = do
-    ensureIOManagerIsRunning
-    sock <- listenOn $ PortNumber 5002
-    acceptConnections sock
+  ensureIOManagerIsRunning
+  let myHints = defaultHints { addrFlags = [AI_PASSIVE] }
+  (ai:_) <- getAddrInfo (Just myHints) Nothing (Just "5002")
+  sock <- socket (addrFamily ai) (addrSocketType ai) (addrProtocol ai)
+  setSocketOption sock ReuseAddr 1
+  bindSocket sock (addrAddress ai)
+  listen sock 1024
+  acceptConnections sock
 
 acceptConnections :: Socket -> IO ()
 acceptConnections sock = loop
