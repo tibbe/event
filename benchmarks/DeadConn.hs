@@ -12,8 +12,8 @@ import Control.Monad (replicateM_)
 import Data.ByteString.Char8 ()
 import Data.Function (on)
 import Data.Monoid (Monoid(..), Last(..))
-import Network.Socket (AddrInfo(..), Family(..), SocketType(..), defaultProtocol,
-                       getAddrInfo, socket, withSocketsDo)
+import Network.Socket (AddrInfo(..), Family(..), SocketType(..), defaultHints,
+                       defaultProtocol, getAddrInfo, socket, withSocketsDo)
 import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
 import System.Event.Thread (ensureIOManagerIsRunning, threadDelay)
@@ -26,18 +26,21 @@ main = withSocketsDo $ do
         host     = theLast cfgHost cfg
         port     = theLast cfgPort cfg
         lim      = ResourceLimit $ fromIntegral numConns + 50
+        myHints  = defaultHints { addrSocketType = Stream }
 
     ensureIOManagerIsRunning
     setResourceLimit ResourceOpenFiles
         ResourceLimits { softLimit = lim, hardLimit = lim }
 
-    addrinfos <- getAddrInfo Nothing (Just host) (Just $ show port)
-    let serveraddr = head addrinfos
+    addrinfos <- getAddrInfo (Just myHints) (Just host) (Just $ show port)
+    let addr = head addrinfos
 
-    putStrLn $ "Establishing " ++ show numConns ++ " connections..."
+    putStrLn $ "Establishing " ++ show numConns ++ " connections to " ++
+        host ++ ":" ++ show port ++ "..."
     replicateM_ numConns $ do
-        sock <- socket AF_INET Stream defaultProtocol
-        connect sock (addrAddress serveraddr)
+        sock <- socket (addrFamily addr) (addrSocketType addr)
+                (addrProtocol addr)
+        connect sock (addrAddress addr)
         sendAll sock request
     putStrLn $ show numConns ++ " connections established"
 

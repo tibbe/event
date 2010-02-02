@@ -31,41 +31,40 @@ import System.Event.Thread
 import System.IO.Error (ioeSetErrorString, mkIOError)
 import System.Posix.Internals
 
-connect :: Socket	-- Unconnected Socket
-	-> SockAddr 	-- Socket address stuff
-	-> IO ()
+connect :: Socket   -- Unconnected Socket
+        -> SockAddr     -- Socket address stuff
+        -> IO ()
 connect sock@(MkSocket s _family _stype _protocol socketStatus) addr = do
- modifyMVar_ socketStatus $ \currentStatus -> do
- if currentStatus /= NotConnected && currentStatus /= Bound
-  then
-   ioError (userError ("connect: can't peform connect on socket in status " ++
-         show currentStatus))
-  else do
-   withSockAddr addr $ \p_addr sz -> do
+  modifyMVar_ socketStatus $ \currentStatus -> do
+  if currentStatus /= NotConnected && currentStatus /= Bound
+    then
+      ioError (userError ("connect: can't peform connect on socket in status " ++
+                          show currentStatus))
+    else do
+      withSockAddr addr $ \p_addr sz -> do
 
-   let  connectLoop = do
-       	   r <- c_connect s p_addr (fromIntegral sz)
-       	   if r == -1
-       	       then do
-	       	       err <- getErrno
-		       case () of
-			 _ | err == eINTR       -> connectLoop
-			 _ | err == eINPROGRESS -> connectBlocked
---			 _ | err == eAGAIN      -> connectBlocked
-			 _                      -> throwSocketError "connect"
-       	       else return r
+      let connectLoop = do
+            r <- c_connect s p_addr (fromIntegral sz)
+            if r == -1
+                then do
+                  err <- getErrno
+                  case () of
+                    _ | err == eINTR       -> connectLoop
+                    _ | err == eINPROGRESS -> connectBlocked
+                    _                      -> throwSocketError "connect"
+                else return r
 
-	connectBlocked = do
-	   threadWaitWrite (fromIntegral s)
-	   err <- getSocketOption sock SoError
-	   if (err == 0)
-	   	then return 0
-	   	else do ioError (errnoToIOError "connect"
-	   			(Errno (fromIntegral err))
-	   			Nothing Nothing)
+          connectBlocked = do
+            threadWaitWrite (fromIntegral s)
+            err <- getSocketOption sock SoError
+            if (err == 0)
+              then return 0
+              else ioError (errnoToIOError "connect"
+                            (Errno (fromIntegral err))
+                            Nothing Nothing)
 
-   connectLoop
-   return Connected
+      connectLoop
+      return Connected
 
 foreign import ccall unsafe "connect"
   c_connect :: CInt -> Ptr SockAddr -> CInt{-CSockLen???-} -> IO CInt
