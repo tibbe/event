@@ -1,0 +1,2 @@
+* Check the 'flags' field in the 'kevent' struct for EV_ERROR when the
+  'kevent' system call returns.
