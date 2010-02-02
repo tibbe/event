@@ -22,8 +22,9 @@ strace.out
 TAGS
 *.tix
 *.orig
+benchmarks/dead-conn
+benchmarks/pong-server
 benchmarks/simple
 benchmarks/thread-delay
 benchmarks/timers
-benchmarks/pong
 tests/tests
