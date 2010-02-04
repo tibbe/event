@@ -1,4 +1,4 @@
-module System.Event.Array.Tests (tests) where
+module Array (tests) where
 
 import System.Event.Array (Array)
 import qualified System.Event.Array as A

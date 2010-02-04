@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module System.Event.PSQ.Tests (tests) where
+module PSQ (tests) where
 
 import System.Event.PSQ (Elem(..), PSQ)
 import qualified System.Event.PSQ as Q
