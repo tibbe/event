@@ -50,6 +50,8 @@ instance E.Backend EPoll where
 new :: IO EPoll
 new = liftM2 EPoll epollCreate (A.new 64)
 
+-- | Change the set of events we are interested in for a given file
+-- descriptor.
 modifyFd :: EPoll -> Fd -> E.Event -> E.Event -> IO ()
 modifyFd ep fd oevt nevt = with (Event (fromEvent nevt) fd) $
                              epollControl (epollFd ep) op fd
@@ -57,19 +59,23 @@ modifyFd ep fd oevt nevt = with (Event (fromEvent nevt) fd) $
            | nevt == mempty = controlOpDelete
            | otherwise      = controlOpModify
 
-poll :: EPoll                        -- ^ state
-     -> Timeout                      -- ^ timeout in milliseconds
-     -> (Fd -> E.Event -> IO ()) -- ^ I/O callback
+-- | Select a set of file descriptors which are ready for I/O
+-- operations and call @f@ for all ready file descriptors, passing the
+-- events that are ready.
+poll :: EPoll                     -- ^ state
+     -> Timeout                   -- ^ timeout in milliseconds
+     -> (Fd -> E.Event -> IO ())  -- ^ I/O callback
      -> IO ()
 poll ep timeout f = do
   let events = epollEvents ep
 
+  -- Will return zero if the system call was interupted, in which case
+  -- we just return (and try again later.)
   n <- A.unsafeLoad events $ \es cap ->
        epollWait (epollFd ep) es cap $ fromTimeout timeout
 
   when (n > 0) $ do
     A.forM_ events $ \e -> f (eventFd e) (toEvent (eventTypes e))
-
     cap <- A.capacity events
     when (cap == n) $ A.ensureCapacity events (2 * cap)
 
