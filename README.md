@@ -62,7 +62,7 @@ Running the tests
 
 You can run all unit tests by running:
 
-    cabal configure && cabal build && cd tests && make tests
+    cabal configure && cabal build && make -C tests run-tests
 
 References
 ----------
