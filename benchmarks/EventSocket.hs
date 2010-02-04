@@ -31,8 +31,8 @@ import System.Event.Thread
 import System.IO.Error (ioeSetErrorString, mkIOError)
 import System.Posix.Internals
 
-connect :: Socket   -- Unconnected Socket
-        -> SockAddr     -- Socket address stuff
+connect :: Socket    -- Unconnected Socket
+        -> SockAddr  -- Socket address stuff
         -> IO ()
 connect sock@(MkSocket s _family _stype _protocol socketStatus) addr = do
   modifyMVar_ socketStatus $ \currentStatus -> do
@@ -43,28 +43,29 @@ connect sock@(MkSocket s _family _stype _protocol socketStatus) addr = do
     else do
       withSockAddr addr $ \p_addr sz -> do
 
-      let connectLoop = do
-            r <- c_connect s p_addr (fromIntegral sz)
-            if r == -1
-                then do
-                  err <- getErrno
-                  case () of
-                    _ | err == eINTR       -> connectLoop
-                    _ | err == eINPROGRESS -> connectBlocked
-                    _                      -> throwSocketError "connect"
-                else return r
+        let connectLoop = do
+              r <- c_connect s p_addr (fromIntegral sz)
+              if r == -1
+                  then do
+                    err <- getErrno
+                    case () of
+                      _ | err == eINTR       -> connectLoop
+                      _ | err == eINPROGRESS -> connectBlocked
+                      _                      -> throwSocketError "connect"
+                  else return r
 
-          connectBlocked = do
-            threadWaitWrite (fromIntegral s)
-            err <- getSocketOption sock SoError
-            if (err == 0)
-              then return 0
-              else ioError (errnoToIOError "connect"
-                            (Errno (fromIntegral err))
-                            Nothing Nothing)
+        connectLoop
+        return Connected
 
-      connectLoop
-      return Connected
+  where
+    connectBlocked = do
+      threadWaitWrite (fromIntegral s)
+      err <- getSocketOption sock SoError
+      if (err == 0)
+        then return 0
+        else ioError (errnoToIOError "connect"
+                      (Errno (fromIntegral err))
+                      Nothing Nothing)
 
 foreign import ccall unsafe "connect"
   c_connect :: CInt -> Ptr SockAddr -> CInt{-CSockLen???-} -> IO CInt
