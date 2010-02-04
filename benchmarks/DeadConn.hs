@@ -45,7 +45,7 @@ main = withSocketsDo $ do
     putStrLn $ show numConns ++ " connections established"
 
     -- Block process forever.
-    threadDelay 10000000000000
+    threadDelay maxBound
 
 request = "GET / HTTP/1.1\r\nHost: www.test.com\r\n\r\n"
 
