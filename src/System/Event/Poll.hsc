@@ -34,8 +34,19 @@ new :: IO Poll
 new = liftM2 Poll (newMVar =<< A.empty) A.empty
 
 modifyFd :: Poll -> Fd -> E.Event -> E.Event -> IO ()
-modifyFd p fd _oevt nevt = withMVar (pollChanges p) $ \pfd ->
-                             A.snoc pfd $ PollFd fd (fromEvent nevt) 0
+modifyFd p fd oevt nevt = do
+  let opevt = fromEvent oevt
+      npevt = fromEvent nevt
+  withMVar (pollChanges p) $ \ary ->
+    if opevt == 0
+    then A.snoc ary $ PollFd fd npevt 0
+    else do
+      found <- A.findIndex ((== opevt) . pfdEvents) ary
+      case found of
+        Nothing        -> error "modifyFd: event not found"
+        Just (i,_)
+          | npevt /= 0 -> A.unsafeWrite ary i $ PollFd fd npevt 0
+          | otherwise  -> A.removeAt ary i
 
 poll :: Poll
      -> E.Timeout

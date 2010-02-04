@@ -10,10 +10,12 @@ module System.Event.Array
     , duplicate
     , empty
     , ensureCapacity
+    , findIndex
     , forM_
     , length
     , loop
     , new
+    , removeAt
     , snoc
     , unsafeLoad
     , unsafeRead
@@ -199,6 +201,24 @@ loop ary z g = loopHack ary z g undefined
                       when cont $ go (n + size) k'
         go 0 y
 
+findIndex :: Storable a => (a -> Bool) -> Array a -> IO (Maybe (Int,a))
+findIndex = findHack undefined
+ where
+  findHack :: Storable b => b -> (b -> Bool) -> Array b -> IO (Maybe (Int,b))
+  findHack dummy p (Array ref) = do
+    AC es len _ <- readIORef ref
+    let size   = sizeOf dummy
+        offset = len * size
+    withForeignPtr es $ \ptr ->
+      let go !n !i
+            | n >= offset = return Nothing
+            | otherwise = do
+                val <- peek (ptr `plusPtr` n)
+                if p val
+                  then return $ Just (i, val)
+                  else go (n + size) (i + 1)
+      in  go 0 0
+
 concat :: Storable a => Array a -> Array a -> IO ()
 concat (Array d) (Array s) = do
   da@(AC _ dlen _) <- readIORef d
@@ -235,6 +255,23 @@ copy' d dstart s sstart maxCount = copyHack d s undefined
                         (fromIntegral (count * size))
             return $ AC dst (max dlen (dstart + count)) dcap
 
+removeAt :: Storable a => Array a -> Int -> IO ()
+removeAt a i = removeHack a undefined
+ where
+  removeHack :: Storable b => Array b -> b -> IO ()
+  removeHack (Array ary) dummy = do
+    AC fp oldLen cap <- readIORef ary
+    when (i <= 0 || i >= oldLen) $ error "removeAt: invalid index"
+    let size   = sizeOf dummy
+        newLen = oldLen - 1
+    when (newLen > 0 && i < newLen) .
+      withForeignPtr fp $ \ptr -> do
+        _ <- memmove (ptr `plusPtr` (size * i))
+                     (ptr `plusPtr` (size * (i+1)))
+                     (fromIntegral (size * (newLen-i)))
+        return ()
+    writeIORef ary (AC fp newLen cap)
+
 firstPowerOf2 :: Int -> Int
 firstPowerOf2 n
     | n <= 0    = 0
@@ -243,3 +280,6 @@ firstPowerOf2 n
 
 foreign import ccall unsafe "string.h memcpy"
     memcpy :: Ptr a -> Ptr a -> CSize -> IO (Ptr a)
+
+foreign import ccall unsafe "string.h memmove"
+    memmove :: Ptr a -> Ptr a -> CSize -> IO (Ptr a)
