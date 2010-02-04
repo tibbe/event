@@ -6,6 +6,7 @@ module System.Event.Manager
       -- * Creation
     , new
     , newWith
+    , newDefaultBackend
 
       -- * Running
     , loop

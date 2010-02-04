@@ -17,6 +17,8 @@ import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
 import System.Event (Event, EventManager, FdKey(..), evtRead, evtWrite, loop,
                      new, registerFd, registerTimeout)
+import System.Event.Manager (newDefaultBackend, newWith)
+import qualified System.Event.Poll as Poll
 import System.Posix.IO (createPipe)
 import System.Posix.Resource (ResourceLimit(..), ResourceLimits(..),
                               Resource(..), setResourceLimit)
@@ -94,7 +96,8 @@ main = do
     putStrLn "creating pipes"
     pipePairs <- replicateM numPipes createPipe
 
-    mgr <- new
+    mgr <- newWith =<< newDefaultBackend
+    -- mgr <- newWith =<< Poll.new
     _ <- forkIO $ loop mgr
     rref <- newIORef 0
     wref <- newIORef 0
