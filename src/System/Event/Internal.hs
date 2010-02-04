@@ -1,20 +1,27 @@
+{-# LANGUAGE ExistentialQuantification #-}
+
 module System.Event.Internal
     (
-    -- * Core types
-      Backend(..)
+    -- * Event back end
+      Backend
+    , backend
+    , poll
+    , modifyFd
+    -- * Event type
     , Event
     , evtRead
     , evtWrite
     , eventIs
-    , throwErrnoIfMinus1NoRetry
+    -- * Timeout type
     , Timeout(..)
+    -- * Helpers
+    , throwErrnoIfMinus1NoRetry
     ) where
 
 import Data.Bits ((.|.), (.&.))
 import Data.List (foldl', intercalate)
 import Data.Monoid (Monoid(..))
 import Foreign.C.Error (eINTR, getErrno, throwErrno)
-import Foreign.C.Types (CInt)
 import System.Posix.Types (Fd)
 
 -- | An I/O event.
@@ -61,24 +68,39 @@ data Timeout = Timeout {-# UNPACK #-} !Double
                deriving (Show)
 
 -- | Event notification backend.
-class Backend a where
-    -- | Create a new backend.
-    new :: IO a
+data Backend = forall a. Backend {
+      _beState :: {-# UNPACK #-} !a
 
     -- | Poll backend for new events.  The provided callback is called
     -- once per file descriptor with new events.
-    poll :: a                          -- ^ backend state
-         -> Timeout                    -- ^ timeout in milliseconds
-         -> (Fd -> Event -> IO ())     -- ^ I/O callback
-         -> IO ()
+    , _bePoll :: a                          -- ^ backend state
+              -> Timeout                    -- ^ timeout in milliseconds
+              -> (Fd -> Event -> IO ())     -- ^ I/O callback
+              -> IO ()
 
     -- | Register, modify, or unregister interest in the given events
     -- on the given file descriptor.
-    modifyFd :: a
-             -> Fd       -- ^ file descriptor
-             -> Event    -- ^ old events to watch for ('mempty' for new)
-             -> Event    -- ^ new events to watch for ('mempty' to delete)
-             -> IO ()
+    , _beModifyFd :: a
+                  -> Fd       -- ^ file descriptor
+                  -> Event    -- ^ old events to watch for ('mempty' for new)
+                  -> Event    -- ^ new events to watch for ('mempty' to delete)
+                  -> IO ()
+    }
+
+backend :: (a -> Timeout -> (Fd -> Event -> IO ()) -> IO ())
+        -> (a -> Fd -> Event -> Event -> IO ())
+        -> a
+        -> Backend
+backend bPoll bModifyFd state = Backend state bPoll bModifyFd
+{-# INLINE backend #-}
+
+poll :: Backend -> Timeout -> (Fd -> Event -> IO ()) -> IO ()
+poll (Backend bState bPoll _) = bPoll bState
+{-# INLINE poll #-}
+
+modifyFd :: Backend -> Fd -> Event -> Event -> IO ()
+modifyFd (Backend bState _ bModifyFd) = bModifyFd bState
+{-# INLINE modifyFd #-}
 
 -- | Throw an 'IOError' corresponding to the current value of
 -- 'getErrno' if the result value of the 'IO' action is -1 and

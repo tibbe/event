@@ -8,7 +8,7 @@ module System.Event.Poll where
 #include <poll.h>
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
-import Control.Monad (liftM2)
+import Control.Monad (liftM, liftM2)
 import Data.Bits (Bits, (.|.), (.&.))
 import Data.Monoid (Monoid(..))
 import Foreign.C.Types (CInt, CShort, CULong)
@@ -23,15 +23,8 @@ data Poll = Poll {
     , pollFd      :: {-# UNPACK #-} !(A.Array PollFd)
     }
 
-type Backend = Poll
-
-instance E.Backend Poll where
-    new      = new
-    poll     = poll
-    modifyFd = modifyFd
-
-new :: IO Poll
-new = liftM2 Poll (newMVar =<< A.empty) A.empty
+new :: IO E.Backend
+new = E.backend poll modifyFd `liftM` liftM2 Poll (newMVar =<< A.empty) A.empty
 
 modifyFd :: Poll -> Fd -> E.Event -> E.Event -> IO ()
 modifyFd p fd oevt nevt =

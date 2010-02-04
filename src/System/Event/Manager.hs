@@ -88,13 +88,13 @@ newtype TimeoutKey   = TK Unique
 type TimeoutCallback = IO ()
 
 -- | The event manager state.
-data EventManager = forall a. Backend a => EventManager
-    { emBackend      :: !a
-    , emFds          :: !(MVar (IM.IntMap [FdData]))
-    , emTimeouts     :: !(IORef (Q.PSQ TimeoutCallback))
-    , emKeepRunning  :: !(IORef Bool)
-    , emUniqueSource :: !UniqueSource
-    , emControl      :: !Control
+data EventManager = EventManager
+    { emBackend      :: {-# UNPACK #-} !Backend
+    , emFds          :: {-# UNPACK #-} !(MVar (IM.IntMap [FdData]))
+    , emTimeouts     :: {-# UNPACK #-} !(IORef (Q.PSQ TimeoutCallback))
+    , emKeepRunning  :: {-# UNPACK #-} !(IORef Bool)
+    , emUniqueSource :: {-# UNPACK #-} !UniqueSource
+    , emControl      :: {-# UNPACK #-} !Control
     }
 
 ------------------------------------------------------------------------
@@ -107,17 +107,14 @@ handleControlEvent mgr reg _evt = do
     CMsgWakeup -> return ()
     CMsgDie    -> writeIORef (emKeepRunning mgr) False
 
+newDefaultBackend :: IO Backend
 #if defined(HAVE_KQUEUE)
-newDefaultBackend :: IO KQueue.Backend
 newDefaultBackend = KQueue.new
 #elif defined(HAVE_EPOLL)
-newDefaultBackend :: IO EPoll.Backend
 newDefaultBackend = EPoll.new
 #elif defined(HAVE_POLL)
-newDefaultBackend :: IO Poll.Backend
 newDefaultBackend = Poll.new
 #else
-newDefaultBackend :: IO a
 newDefaultBackend = error "no back end for this platform"
 #endif
 
@@ -125,7 +122,7 @@ newDefaultBackend = error "no back end for this platform"
 new :: IO EventManager
 new = newWith =<< newDefaultBackend
 
-newWith :: I.Backend b => b -> IO EventManager
+newWith :: Backend -> IO EventManager
 newWith be = do
   iofds <- newMVar IM.empty
   timeouts <- newIORef Q.empty

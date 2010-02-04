@@ -7,7 +7,7 @@ module System.Event.KQueue where
 #if defined(HAVE_KQUEUE)
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
-import Control.Monad (liftM3, when, unless)
+import Control.Monad (liftM, liftM3, when, unless)
 import Data.Bits (Bits(..))
 import Data.Word (Word16, Word32)
 import Foreign.C.Error (throwErrnoIfMinus1)
@@ -47,15 +47,9 @@ data EventQueue = EventQueue {
     , eqEvents   :: {-# UNPACK #-} !(A.Array Event)
     }
 
-type Backend = EventQueue
-
-instance E.Backend EventQueue where
-    new      = new
-    poll     = poll
-    modifyFd = modifyFd
-
-new :: IO EventQueue
-new = liftM3 EventQueue kqueue (newMVar =<< A.empty) (A.new 64)
+new :: IO E.Backend
+new = E.backend poll modifyFd `liftM`
+      liftM3 EventQueue kqueue (newMVar =<< A.empty) (A.new 64)
 
 modifyFd :: EventQueue -> Fd -> E.Event -> E.Event -> IO ()
 modifyFd q fd oevt nevt = withMVar (eqChanges q) $ \ch -> do

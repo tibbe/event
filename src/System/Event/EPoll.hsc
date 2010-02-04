@@ -16,7 +16,7 @@ module System.Event.EPoll where
 
 #include <sys/epoll.h>
 
-import Control.Monad (liftM2, when)
+import Control.Monad (liftM, liftM2, when)
 import Data.Bits (Bits, (.|.), (.&.))
 import Data.Monoid (Monoid(..))
 import Data.Word (Word32)
@@ -35,20 +35,13 @@ import qualified System.Event.Internal as E
 import           System.Event.Internal (Timeout(..))
 
 data EPoll = EPoll {
-      epollFd     :: !EPollFd
-    , epollEvents :: !(A.Array Event)
+      epollFd     :: {-# UNPACK #-} !EPollFd
+    , epollEvents :: {-# UNPACK #-} !(A.Array Event)
     }
 
-type Backend = EPoll
-
-instance E.Backend EPoll where
-    new      = new
-    poll     = poll
-    modifyFd = modifyFd
-
 -- | Create a new epoll backend.
-new :: IO EPoll
-new = liftM2 EPoll epollCreate (A.new 64)
+new :: IO E.Backend
+new = E.backend poll modifyFd `liftM` liftM2 EPoll epollCreate (A.new 64)
 
 -- | Change the set of events we are interested in for a given file
 -- descriptor.
