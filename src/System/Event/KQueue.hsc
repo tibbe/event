@@ -1,10 +1,18 @@
 {-# LANGUAGE ForeignFunctionInterface, GeneralizedNewtypeDeriving,
     RecordWildCards #-}
 
-module System.Event.KQueue where
+module System.Event.KQueue
+    (
+      new
+    ) where
+
+import qualified System.Event.Internal as E
 
 #include "EventConfig.h"
-#if defined(HAVE_KQUEUE)
+#if !defined(HAVE_KQUEUE)
+new :: IO E.Backend
+new = error "KQueue back end not implemented for this platform"
+#else
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
 import Control.Monad (liftM, liftM3, when, unless)
@@ -19,7 +27,6 @@ import Prelude hiding (filter)
 import System.Event.Internal (Timeout(..))
 import System.Posix.Types (Fd(..))
 import qualified System.Event.Array as A
-import qualified System.Event.Internal as E
 
 #if defined(HAVE_KEVENT64)
 import Data.Int (Int64)

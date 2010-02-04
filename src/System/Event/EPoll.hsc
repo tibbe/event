@@ -9,10 +9,18 @@
 --
 -- epoll decouples monitor an fd from the process of registering it.
 --
-module System.Event.EPoll where
+module System.Event.EPoll
+    (
+      new
+    ) where
+
+import qualified System.Event.Internal as E
 
 #include "EventConfig.h"
-#if defined(HAVE_EPOLL)
+#if !defined(HAVE_EPOLL)
+new :: IO E.Backend
+new = error "EPoll back end not implemented for this platform"
+#else
 
 #include <sys/epoll.h>
 
@@ -31,7 +39,6 @@ import System.Posix.Internals (setCloseOnExec)
 import System.Posix.Types (Fd(..))
 
 import qualified System.Event.Array    as A
-import qualified System.Event.Internal as E
 import           System.Event.Internal (Timeout(..))
 
 data EPoll = EPoll {

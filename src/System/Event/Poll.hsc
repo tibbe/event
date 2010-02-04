@@ -1,10 +1,16 @@
 {-# LANGUAGE ForeignFunctionInterface, GeneralizedNewtypeDeriving #-}
 
-module System.Event.Poll where
+module System.Event.Poll
+    (
+      new
+    ) where
 
 #include "EventConfig.h"
 
-#if defined(HAVE_POLL_H)
+#if !defined(HAVE_POLL_H)
+new :: IO E.Backend
+new = error "EPoll back end not implemented for this platform"
+#else
 #include <poll.h>
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
