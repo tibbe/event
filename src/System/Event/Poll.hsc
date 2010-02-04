@@ -34,16 +34,19 @@ new :: IO Poll
 new = liftM2 Poll (newMVar =<< A.empty) A.empty
 
 modifyFd :: Poll -> Fd -> E.Event -> E.Event -> IO ()
-modifyFd p fd oevt nevt = do
-  let opevt = fromEvent oevt
-      npevt = fromEvent nevt
+modifyFd p fd oevt nevt =
   withMVar (pollChanges p) $ \ary ->
-    if opevt == 0
+    A.snoc ary $ PollFd fd (fromEvent nevt) (fromEvent oevt)
+
+reworkFd :: Poll -> PollFd -> IO ()
+reworkFd p (PollFd fd npevt opevt) = do
+  let ary = pollFd p
+  if opevt == 0
     then A.snoc ary $ PollFd fd npevt 0
     else do
-      found <- A.findIndex ((== opevt) . pfdEvents) ary
+      found <- A.findIndex ((== fd) . pfdFd) ary
       case found of
-        Nothing        -> error "modifyFd: event not found"
+        Nothing        -> error "reworkFd: event not found"
         Just (i,_)
           | npevt /= 0 -> A.unsafeWrite ary i $ PollFd fd npevt 0
           | otherwise  -> A.removeAt ary i
@@ -54,7 +57,8 @@ poll :: Poll
      -> IO ()
 poll p tout f = do
   let a = pollFd p
-  A.concat a =<< swapMVar (pollChanges p) =<< A.empty
+  mods <- swapMVar (pollChanges p) =<< A.empty
+  A.forM_ mods (reworkFd p)
   n <- A.useAsPtr a $ \ptr len -> E.throwErrnoIfMinus1NoRetry "c_poll" $
          c_poll ptr (fromIntegral len) (fromIntegral (fromTimeout tout))
   if n == 0

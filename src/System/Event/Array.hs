@@ -261,7 +261,7 @@ removeAt a i = removeHack a undefined
   removeHack :: Storable b => Array b -> b -> IO ()
   removeHack (Array ary) dummy = do
     AC fp oldLen cap <- readIORef ary
-    when (i <= 0 || i >= oldLen) $ error "removeAt: invalid index"
+    when (i < 0 || i >= oldLen) $ error "removeAt: invalid index"
     let size   = sizeOf dummy
         newLen = oldLen - 1
     when (newLen > 0 && i < newLen) .
