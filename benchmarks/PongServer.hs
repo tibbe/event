@@ -19,7 +19,7 @@ import Data.Monoid (Monoid(..), Last(..))
 import Network.Socket hiding (accept, recv)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as C
-#if 0
+#if 1
 import EventSocket (accept, recv, sendAll)
 #else
 import Network.Socket (accept)
