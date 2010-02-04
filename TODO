@@ -1,2 +1,10 @@
 * Check the 'flags' field in the 'kevent' struct for EV_ERROR when the
   'kevent' system call returns.
+
+* Is it really worth using a dynamic array to store events returned
+  from poll instead of using a fixed size of e.g. 1024?  At least for
+  the epoll and kqueue backends that don't require the array size to
+  be equal to the number of watched file descriptors.
+
+* Can we avoid writing a byte into the wakeup pipe by first checking
+  an IORef?  What are the possible races?
