@@ -1,5 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface, MagicHash, UnboxedTuples #-}
-{-# OPTIONS_GHC -fglasgow-exts #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 
 module System.Event.Thread
     (
@@ -10,15 +9,11 @@ module System.Event.Thread
     , registerDelay
     ) where
 
-import GHC.Base
-import GHC.IOBase
-import Control.Monad (forM_, liftM2)
 import Control.Concurrent.MVar (MVar, modifyMVar_, newEmptyMVar, newMVar,
                                 putMVar, takeMVar)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Foreign.C.Types (CInt)
-import GHC.Conc (TVar, ThreadId(..), ThreadStatus(..), atomically, forkOnIO,
-                 labelThread, newTVar, numCapabilities, threadStatus, writeTVar)
+import GHC.Conc (TVar, ThreadId, ThreadStatus(..), atomically, forkIO,
+                 labelThread, newTVar, threadStatus, writeTVar)
 import qualified GHC.Conc as Conc
 import System.Event.Manager (Event, EventManager, evtRead, evtWrite, loop,
                              new, registerFd, unregisterFd_, registerTimeout)
@@ -36,14 +31,9 @@ threadDelay time
   | threaded  = waitForDelayEvent time
   | otherwise = Conc.threadDelay time
 
-myEventManager :: IO (IORef (Managing EventManager))
-myEventManager = do
-  Manager e _i <- unsafeReadIOArray managers =<< myCapability
-  return e
-
 waitForDelayEvent :: Int -> IO ()
 waitForDelayEvent usecs = do
-  Running mgr <- readIORef =<< myEventManager
+  Running mgr <- readIORef eventManager
   m <- newEmptyMVar
   _ <- registerTimeout mgr (usecs `div` 1000) (putMVar m ())
   takeMVar m
@@ -59,7 +49,7 @@ registerDelay usecs
 waitForDelayEventSTM :: Int -> IO (TVar Bool)
 waitForDelayEventSTM usecs = do
   t <- atomically $ newTVar False
-  Running mgr <- readIORef =<< myEventManager
+  Running mgr <- readIORef eventManager
   _ <- registerTimeout mgr (usecs `div` 1000) . atomically $ writeTVar t True
   return t   
 
@@ -83,64 +73,39 @@ data Managing a = None
 threadWait :: Event -> Fd -> IO ()
 threadWait evt fd = do
   m <- newEmptyMVar
-  Running mgr <- readIORef =<< myEventManager
+  Running mgr <- readIORef eventManager
   _ <- registerFd mgr (\reg _ -> unregisterFd_ mgr reg >> putMVar m ()) fd evt
   takeMVar m
 
-data Manager = Manager {
-      _evtMgr :: {-# UNPACK #-} !(IORef (Managing EventManager))
-    , _ioMgr  :: {-# UNPACK #-} !(MVar (Managing ThreadId))
-    }
+eventManager :: IORef (Managing EventManager)
+eventManager = unsafePerformIO $ newIORef None
+{-# NOINLINE eventManager #-}
 
-managers :: IOArray Int Manager
-managers = unsafePerformIO $ do
-             a <- newIOArray (0,numCapabilities-1) undefined
-             forM_ [0..numCapabilities-1] $ \i -> do
-               m <- liftM2 Manager (newIORef None) (newMVar None)
-               unsafeWriteIOArray a i m
-             return a
-{-# NOINLINE managers #-}
+ioManager :: MVar (Managing ThreadId)
+ioManager = unsafePerformIO $ newMVar None
+{-# NOINLINE ioManager #-}
 
 ensureIOManagerIsRunning :: IO ()
-ensureIOManagerIsRunning = forM_ [0..numCapabilities-1] ensureManagerIsRunning
-
-ensureManagerIsRunning :: Int -> IO ()
-ensureManagerIsRunning n = do
-  Manager eventManager ioManager <- unsafeReadIOArray managers n
-  modifyMVar_ ioManager $ \old -> do
-    maybeMgr <- readIORef eventManager
-    mgr <- case maybeMgr of
-             Running m -> return m
-             None      -> do m <- new
-                             writeIORef eventManager $! Running m
-                             return m
-    let create = do
-          t <- forkOnIO n $ loop mgr
-          labelThread t ("IOManager-" ++ show n)
-          return $! Running t
-    case old of
-      None                -> create
-      st@(Running t) -> do
-        s <- threadStatus t
-        case s of
-          ThreadFinished -> create
-          ThreadDied     -> create
-          _other         -> return st
-
--- This should really report the number of the capability on which
--- we're currently executing, but it can't because that's not made
--- public by GHC's RTS.  In principle, this hack should work well
--- enough.
-myCapability :: IO Int
-myCapability
-    | numCapabilities == 1 = return 0
-    | otherwise = do
-        ThreadId i <- myThreadId
-        return $! (fromIntegral (getThreadId i) `mod` numCapabilities)
-  where
-    myThreadId = IO $ \s ->
-      case (myThreadId# s) of (# s1, tid #) -> (# s1, ThreadId tid #)
+ensureIOManagerIsRunning
+  | not threaded = return ()
+  | otherwise = modifyMVar_ ioManager $ \old -> do
+  maybeMgr <- readIORef eventManager
+  mgr <- case maybeMgr of
+           Running m -> return m
+           None      -> do m <- new
+                           writeIORef eventManager $! Running m
+                           return m
+  let create = do
+        t <- forkIO $ loop mgr
+        labelThread t "IOManager"
+        return $! Running t
+  case old of
+    None                -> create
+    st@(Running t) -> do
+      s <- threadStatus t
+      case s of
+        ThreadFinished -> create
+        ThreadDied     -> create
+        _other         -> return st
 
 foreign import ccall unsafe "rtsSupportsBoundThreads" threaded :: Bool
-
-foreign import ccall unsafe "rts_getThreadId" getThreadId :: ThreadId# -> CInt
