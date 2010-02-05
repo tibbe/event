@@ -8,8 +8,10 @@ ifdef USE_GHC_IO_MANAGER
 	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
 endif
 
+programs := dead-conn pong-server signal simple thread-delay timers
+
 .PHONY: all
-all: dead-conn pong-server simple thread-delay timers
+all: $(programs)
 
 dead-conn: ghc-flags += $(ghc-bench-flags)
 dead-conn: $(lib) Args.o EventSocket.o DeadConn.o
@@ -18,6 +20,10 @@ dead-conn: $(lib) Args.o EventSocket.o DeadConn.o
 
 pong-server: ghc-flags += $(ghc-bench-flags)
 pong-server: $(lib) Args.o EventSocket.o PongServer.o
+	ranlib $(lib)
+	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
+
+signal: $(lib) Signal.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
@@ -40,4 +46,4 @@ timers: $(lib) Args.o Timers.o
 .PHONY: clean
 clean:
 	-find . \( -name '*.o' -o -name '*.hi' \) -exec rm {} \;
-	-rm -f dead-conn pong-server simple thread-delay timers
+	-rm -f $(programs)

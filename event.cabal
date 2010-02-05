@@ -35,6 +35,7 @@ library
     System.Event.Manager
     System.Event.PSQ
     System.Event.Poll
+    System.Event.Signal
     System.Event.Unique
 
   build-depends:

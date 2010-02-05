@@ -3,15 +3,14 @@
 
 #include "EventConfig.h"
 
-#if defined(HAVE_SIGNAL_H)
-# include <signal.h>
-#endif
+#include <signal.h>
+#include <pthread.h>
 
 #if !defined(INLINE)
 # if defined(_MSC_VER)
 #  define INLINE extern __inline
 # else
-#  define INLINE static inline
+#  define INLINE inline
 # endif
 #endif
 
@@ -24,9 +23,14 @@ INLINE int __hsevent_num_signals(void)
 #endif
 }
 
-INLINE int __hsevent_sigusr2(void)
+INLINE void __hsevent_thread_self(pthread_t *tid)
 {
-    return SIGUSR2;
+    *tid = pthread_self();
+}
+
+INLINE int __hsevent_kill_thread(pthread_t *tid, int sig)
+{
+    return pthread_kill(*tid, sig);
 }
 
 #endif /* __HS_EVENT_H__ */
