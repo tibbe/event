@@ -12,8 +12,8 @@ import Control.Monad (replicateM_)
 import Data.ByteString.Char8 ()
 import Data.Function (on)
 import Data.Monoid (Monoid(..), Last(..))
-import Network.Socket (AddrInfo(..), Family(..), SocketType(..), defaultHints,
-                       defaultProtocol, getAddrInfo, socket, withSocketsDo)
+import Network.Socket (AddrInfo(..), SocketType(..), defaultHints, getAddrInfo,
+                       socket, withSocketsDo)
 import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
 import System.Event.Thread (ensureIOManagerIsRunning, threadDelay)

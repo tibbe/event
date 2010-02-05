@@ -9,12 +9,12 @@ module System.Event.Poll
 
 #if !defined(HAVE_POLL_H)
 new :: IO E.Backend
-new = error "EPoll back end not implemented for this platform"
+new = error "Poll back end not implemented for this platform"
 #else
 #include <poll.h>
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
-import Control.Monad (liftM, liftM2)
+import Control.Monad (liftM, liftM2, unless)
 import Data.Bits (Bits, (.|.), (.&.))
 import Data.Monoid (Monoid(..))
 import Foreign.C.Types (CInt, CShort, CULong)
@@ -60,16 +60,14 @@ poll p tout f = do
   A.forM_ mods (reworkFd p)
   n <- A.useAsPtr a $ \ptr len -> E.throwErrnoIfMinus1NoRetry "c_poll" $
          c_poll ptr (fromIntegral len) (fromIntegral (fromTimeout tout))
-  if n == 0
-    then return ()
-    else do
-      A.loop a 0 $ \i e -> do
-        let r = pfdRevents e
-        if r /= 0
-          then do f (pfdFd e) (toEvent r)
-                  let i' = i + 1
-                  return (i', i' == n)
-          else return (i, True)
+  unless (n == 0) $ do
+    A.loop a 0 $ \i e -> do
+      let r = pfdRevents e
+      if r /= 0
+        then do f (pfdFd e) (toEvent r)
+                let i' = i + 1
+                return (i', i' == n)
+        else return (i, True)
 
 fromTimeout :: E.Timeout -> Int
 fromTimeout E.Forever     = -1
