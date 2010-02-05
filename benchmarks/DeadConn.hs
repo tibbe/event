@@ -6,14 +6,14 @@
 -- number of slow/idle connections to a server.
 
 import Args (ljust, nonNegative, parseArgs, positive, theLast)
-import EventSocket (connect, sendAll)
-
-import Control.Monad (replicateM_)
-import Data.ByteString.Char8 ()
+import EventSocket (connect, recv, sendAll)
+import Control.Concurrent (forkIO)
+import Control.Monad (forM_, forever)
+import qualified Data.ByteString.Char8 as S
 import Data.Function (on)
 import Data.Monoid (Monoid(..), Last(..))
 import Network.Socket (AddrInfo(..), SocketType(..), defaultHints, getAddrInfo,
-                       socket, withSocketsDo)
+                       socket, sClose, withSocketsDo)
 import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
 import System.Event.Thread (ensureIOManagerIsRunning, threadDelay)
@@ -25,6 +25,7 @@ main = withSocketsDo $ do
     let numConns = theLast cfgNumConns cfg
         host     = theLast cfgHost cfg
         port     = theLast cfgPort cfg
+        delay    = theLast cfgDelay cfg * 1000
         lim      = ResourceLimit $ fromIntegral numConns + 50
         myHints  = defaultHints { addrSocketType = Stream }
 
@@ -35,14 +36,26 @@ main = withSocketsDo $ do
     addrinfos <- getAddrInfo (Just myHints) (Just host) (Just $ show port)
     let addr = head addrinfos
 
-    putStrLn $ "Establishing " ++ show numConns ++ " connections to " ++
+    putStrLn $ "Running " ++ show numConns ++ " threads to clobber " ++
         host ++ ":" ++ show port ++ "..."
-    replicateM_ numConns $ do
+    forM_ [0..numConns-1] $ \n -> forkIO . forever $ do
         sock <- socket (addrFamily addr) (addrSocketType addr)
                 (addrProtocol addr)
         connect sock (addrAddress addr)
-        sendAll sock request
-    putStrLn $ show numConns ++ " connections established"
+        let sendLoop s
+                | S.null s = recvLoop
+                | otherwise = do
+                     let (h,t) = S.splitAt 2 s
+                     sendAll sock h
+                     threadDelay (delay + n * 1037)
+                     sendLoop t
+            recvLoop = do
+                     s <- recv sock 2
+                     if S.null s
+                       then sClose sock
+                       else threadDelay (delay + n * 1037) >> recvLoop
+        sendLoop request
+    putStrLn $ show numConns ++ " threads looping"
 
     -- Block process forever.
     threadDelay maxBound
@@ -54,6 +67,7 @@ request = "GET / HTTP/1.1\r\nHost: www.test.com\r\n\r\n"
 
 data Config = Config {
       cfgNumConns :: Last Int
+    , cfgDelay    :: Last Int
     , cfgHost     :: Last String
     , cfgPort     :: Last Int
     }
@@ -61,6 +75,7 @@ data Config = Config {
 defaultConfig :: Config
 defaultConfig = Config
     { cfgNumConns = ljust 50
+    , cfgDelay    = ljust 100
     , cfgHost     = ljust "localhost"
     , cfgPort     = ljust 3000
     }
@@ -68,12 +83,14 @@ defaultConfig = Config
 instance Monoid Config where
     mempty = Config
         { cfgNumConns = mempty
+        , cfgDelay    = mempty
         , cfgHost     = mempty
         , cfgPort     = mempty
         }
 
     mappend a b = Config
         { cfgNumConns = app cfgNumConns a b
+        , cfgDelay    = app cfgDelay a b
         , cfgHost     = app cfgHost a b
         , cfgPort     = app cfgPort a b
         }
@@ -87,6 +104,10 @@ defaultOptions = [
           (ReqArg (nonNegative "number of connections" $ \n ->
                mempty { cfgNumConns = n }) "N")
           "number of connections"
+    , Option ['d'] ["delay"]
+          (ReqArg (nonNegative "delay between chunks" $ \d ->
+               mempty { cfgDelay = d }) "N")
+          "delay between chunks (ms)"
     , Option ['h'] ["host"]
           (ReqArg (\s -> return $ mempty { cfgHost = ljust s }) "HOST")
           "server address"
