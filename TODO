@@ -8,3 +8,15 @@
 
 * Can we avoid writing a byte into the wakeup pipe by first checking
   an IORef?  What are the possible races?
+
+* Return interesting statistics than can be logged by the RTS and used
+  in e.g. ThreadScope.  Number of file descriptors returned from a
+  poll and the number of timed out polls are two interesting
+  statistics.
+
+* How does epoll handle closed file descriptors? They need to be
+  removed from the epoll set.
+
+* Change how the default backend is selected as whether you have a
+  backend or not might be distrinct from whether that backend is
+  functional or not.
