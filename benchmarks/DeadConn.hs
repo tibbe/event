@@ -39,21 +39,23 @@ main = withSocketsDo $ do
     putStrLn $ "Running " ++ show numConns ++ " threads to clobber " ++
         host ++ ":" ++ show port ++ "..."
     forM_ [0..numConns-1] $ \n -> forkIO . forever $ do
+        let myDelay = delay + n * 1037
         sock <- socket (addrFamily addr) (addrSocketType addr)
                 (addrProtocol addr)
         connect sock (addrAddress addr)
         let sendLoop s
                 | S.null s = recvLoop
                 | otherwise = do
+                     threadDelay myDelay
                      let (h,t) = S.splitAt 2 s
                      sendAll sock h
-                     threadDelay (delay + n * 1037)
                      sendLoop t
             recvLoop = do
-                     s <- recv sock 2
+                     threadDelay myDelay
+                     s <- recv sock 256
                      if S.null s
                        then sClose sock
-                       else threadDelay (delay + n * 1037) >> recvLoop
+                       else recvLoop
         sendLoop request
     putStrLn $ show numConns ++ " threads looping"
 
