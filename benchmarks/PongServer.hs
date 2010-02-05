@@ -18,12 +18,12 @@ import Data.Function (on)
 import Data.Monoid (Monoid(..), Last(..))
 import Network.Socket hiding (accept, recv)
 import qualified Data.ByteString as S
-import qualified Data.ByteString.Char8 as C
-#if 1
-import EventSocket (accept, recv, sendAll)
-#else
+import qualified Data.ByteString.Char8 as C ()
+#ifdef USE_GHC_IO_MANAGER
 import Network.Socket (accept)
 import Network.Socket.ByteString (recv, sendAll)
+#else
+import EventSocket (accept, recv, sendAll)
 #endif
 import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), OptDescr(..))
 import System.Environment (getArgs)
@@ -37,7 +37,9 @@ main = do
       lim  = ResourceLimit . fromIntegral . theLast cfgMaxConns $ cfg
       myHints = defaultHints { addrFlags = [AI_PASSIVE]
                              , addrSocketType = Stream }
+#ifndef USE_GHC_IO_MANAGER
   ensureIOManagerIsRunning
+#endif
   setResourceLimit ResourceOpenFiles
       ResourceLimits { softLimit = lim, hardLimit = lim }
   (ai:_) <- getAddrInfo (Just myHints) Nothing (Just port)

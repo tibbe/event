@@ -9,7 +9,7 @@ module System.Event.Poll
 
 #if !defined(HAVE_POLL_H)
 new :: IO E.Backend
-new = error "EPoll back end not implemented for this platform"
+new = error "Poll back end not implemented for this platform"
 #else
 #include <poll.h>
 
