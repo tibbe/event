@@ -1,0 +1,12 @@
+Increasing the maximum number of open files
+===========================================
+
+== Mac OS X ==
+
+$ sudo sysctl -w kern.maxfilesperproc=20480 kern.maxfiles=22528
+
+- maxfiles is the maximum total number of open files allowed on the
+  system as a whole
+
+- maxfilesperproc is the maximum number of open files allowed for any
+  one program
