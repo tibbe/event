@@ -15,7 +15,6 @@ new = error "EPoll back end not implemented for this platform"
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
 import Control.Monad (liftM, liftM2, unless)
-import Control.Monad (liftM2, unless)
 import Data.Bits (Bits, (.|.), (.&.))
 import Data.Monoid (Monoid(..))
 import Foreign.C.Types (CInt, CShort, CULong)
