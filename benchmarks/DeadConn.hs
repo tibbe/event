@@ -47,7 +47,8 @@ main = withSocketsDo $ do
                 | S.null s = recvLoop
                 | otherwise = do
                      threadDelay myDelay
-                     let (h,t) = S.splitAt 2 s
+                     let len = (n `mod` (S.length request - 1)) + 1
+                     let (h,t) = S.splitAt len s
                      sendAll sock h
                      sendLoop t
             recvLoop = do
