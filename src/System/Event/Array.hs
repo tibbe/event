@@ -3,6 +3,7 @@
 module System.Event.Array
     (
       Array
+    , addFinalizer
     , capacity
     , clear
     , concat
@@ -24,7 +25,8 @@ module System.Event.Array
     ) where
 
 import Control.Monad (when)
-import Data.IORef (IORef, atomicModifyIORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, atomicModifyIORef, mkWeakIORef, newIORef, readIORef,
+                   writeIORef)
 import Foreign.C.Types (CSize)
 import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
 import Foreign.Ptr (Ptr, nullPtr, plusPtr)
@@ -76,6 +78,9 @@ reallocArray p newSize oldSize = reallocHack undefined p
             _ <- memcpy d s (fromIntegral (oldSize * size))
             return ()
       return dst
+
+addFinalizer :: Array a -> IO () -> IO ()
+addFinalizer (Array ref) fin = mkWeakIORef ref fin >> return ()
 
 new :: Storable a => Int -> IO (Array a)
 new c = do

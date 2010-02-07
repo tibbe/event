@@ -5,6 +5,7 @@ module System.Event.Internal
     -- * Event back end
       Backend
     , backend
+    , delete
     , poll
     , modifyFd
     -- * Event type
@@ -85,22 +86,29 @@ data Backend = forall a. Backend {
                   -> Event    -- ^ old events to watch for ('mempty' for new)
                   -> Event    -- ^ new events to watch for ('mempty' to delete)
                   -> IO ()
+
+    , _beDelete :: a -> IO ()
     }
 
 backend :: (a -> Timeout -> (Fd -> Event -> IO ()) -> IO ())
         -> (a -> Fd -> Event -> Event -> IO ())
+        -> (a -> IO ())
         -> a
         -> Backend
-backend bPoll bModifyFd state = Backend state bPoll bModifyFd
+backend bPoll bModifyFd bDelete state = Backend state bPoll bModifyFd bDelete
 {-# INLINE backend #-}
 
 poll :: Backend -> Timeout -> (Fd -> Event -> IO ()) -> IO ()
-poll (Backend bState bPoll _) = bPoll bState
+poll (Backend bState bPoll _ _) = bPoll bState
 {-# INLINE poll #-}
 
 modifyFd :: Backend -> Fd -> Event -> Event -> IO ()
-modifyFd (Backend bState _ bModifyFd) = bModifyFd bState
+modifyFd (Backend bState _ bModifyFd _) = bModifyFd bState
 {-# INLINE modifyFd #-}
+
+delete :: Backend -> IO ()
+delete (Backend bState _ _ bDelete) = bDelete bState
+{-# INLINE delete #-}
 
 -- | Throw an 'IOError' corresponding to the current value of
 -- 'getErrno' if the result value of the 'IO' action is -1 and

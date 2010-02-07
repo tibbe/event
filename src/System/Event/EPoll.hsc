@@ -24,7 +24,7 @@ new = error "EPoll back end not implemented for this platform"
 
 #include <sys/epoll.h>
 
-import Control.Monad (liftM, liftM2, when)
+import Control.Monad (when)
 import Data.Bits (Bits, (.|.), (.&.))
 import Data.Monoid (Monoid(..))
 import Data.Word (Word32)
@@ -33,6 +33,7 @@ import Foreign.C.Types (CInt)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable(..))
+import System.Posix.Internals (c_close)
 #if !defined(HAVE_EPOLL_CREATE1)
 import System.Posix.Internals (setCloseOnExec)
 #endif
@@ -48,7 +49,16 @@ data EPoll = EPoll {
 
 -- | Create a new epoll backend.
 new :: IO E.Backend
-new = E.backend poll modifyFd `liftM` liftM2 EPoll epollCreate (A.new 64)
+new = do
+  epfd <- epollCreate
+  evts <- A.new 64
+  A.addFinalizer evts $ c_close (fromEPollFd epfd) >> return ()
+  return $! E.backend poll modifyFd delete (EPoll epfd evts)
+
+delete :: EPoll -> IO ()
+delete be = do
+  c_close . fromEPollFd . epollFd $ be
+  return ()
 
 -- | Change the set of events we are interested in for a given file
 -- descriptor.
@@ -79,7 +89,9 @@ poll ep timeout f = do
     cap <- A.capacity events
     when (cap == n) $ A.ensureCapacity events (2 * cap)
 
-newtype EPollFd = EPollFd CInt
+newtype EPollFd = EPollFd {
+      fromEPollFd :: CInt
+    } deriving (Eq, Show)
 
 data Event = Event {
       eventTypes :: EventType

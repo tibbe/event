@@ -15,7 +15,7 @@ new = error "KQueue back end not implemented for this platform"
 #else
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
-import Control.Monad (liftM, liftM3, when, unless)
+import Control.Monad (when, unless)
 import Data.Bits (Bits(..))
 import Data.Word (Word16, Word32)
 import Foreign.C.Error (throwErrnoIfMinus1)
@@ -55,8 +55,17 @@ data EventQueue = EventQueue {
     }
 
 new :: IO E.Backend
-new = E.backend poll modifyFd `liftM`
-      liftM3 EventQueue kqueue (newMVar =<< A.empty) (A.new 64)
+new = do
+  qfd <- kqueue
+  changes <- newMVar =<< A.empty
+  events <- A.new 64
+  A.addFinalizer events $ c_close (fromQueueFd qfd) >> return ()
+  return $! E.backend poll modifyFd delete (EventQueue qfd changes events)
+
+delete :: EventQueue -> IO ()
+delete q = do
+  c_close . fromQueueFd . eqFd $ q
+  return ()
 
 modifyFd :: EventQueue -> Fd -> E.Event -> E.Event -> IO ()
 modifyFd q fd oevt nevt = withMVar (eqChanges q) $ \ch -> do
@@ -88,8 +97,9 @@ poll EventQueue{..} tout f = do
 ------------------------------------------------------------------------
 -- FFI binding
 
-newtype QueueFd = QueueFd CInt
-    deriving (Eq, Show)
+newtype QueueFd = QueueFd {
+      fromQueueFd :: CInt
+    } deriving (Eq, Show)
 
 #if defined(HAVE_KEVENT64)
 data Event = KEvent64 {

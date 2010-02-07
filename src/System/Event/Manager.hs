@@ -38,18 +38,19 @@ module System.Event.Manager
 -- Imports
 
 import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar, readMVar)
+import Control.Exception (finally)
 import Control.Monad (forM_, when)
-import Data.IORef (IORef, atomicModifyIORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, atomicModifyIORef, mkWeakIORef, newIORef, readIORef,
+                   writeIORef)
 import Data.Monoid (mconcat, mempty)
-import System.Posix.Types (Fd)
-
 import System.Event.Clock (getCurrentTime)
+import System.Event.Control
 import System.Event.Internal (Backend, Event, evtRead, evtWrite, Timeout(..))
+import System.Event.Unique (Unique, UniqueSource, newSource, newUnique)
+import System.Posix.Types (Fd)
+import qualified System.Event.IntMap as IM
 import qualified System.Event.Internal as I
 import qualified System.Event.PSQ as Q
-import System.Event.Control
-import qualified System.Event.IntMap as IM
-import System.Event.Unique (Unique, UniqueSource, newSource, newUnique)
 
 #if defined(HAVE_KQUEUE)
 import qualified System.Event.KQueue as KQueue
@@ -129,6 +130,7 @@ newWith be = do
   ctrl <- newControl
   run <- newIORef True
   us <- newSource
+  _ <- mkWeakIORef run $ closeControl ctrl
   let mgr = EventManager { emBackend = be
                          , emFds = iofds
                          , emTimeouts = timeouts
@@ -145,12 +147,13 @@ newWith be = do
 
 -- | Start handling events.  This function loops until told to stop.
 loop :: EventManager -> IO ()
-loop mgr@EventManager{..} = go
+loop mgr@EventManager{..} =
+    go `finally` I.delete emBackend >> closeControl emControl
   where
     go = do
       timeout <- mkTimeout
       I.poll emBackend timeout (onFdEvent mgr)
-      flip when go =<< readIORef emKeepRunning
+      (`when` go) =<< readIORef emKeepRunning
 
     -- | Call all expired timer callbacks and return the time to the
     -- next timeout.

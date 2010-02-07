@@ -30,7 +30,8 @@ data Poll = Poll {
     }
 
 new :: IO E.Backend
-new = E.backend poll modifyFd `liftM` liftM2 Poll (newMVar =<< A.empty) A.empty
+new = E.backend poll modifyFd (\_ -> return ()) `liftM`
+      liftM2 Poll (newMVar =<< A.empty) A.empty
 
 modifyFd :: Poll -> Fd -> E.Event -> E.Event -> IO ()
 modifyFd p fd oevt nevt =
