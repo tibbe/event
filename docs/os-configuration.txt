@@ -10,3 +10,10 @@ $ sudo sysctl -w kern.maxfilesperproc=20480 kern.maxfiles=22528
 
 - maxfilesperproc is the maximum number of open files allowed for any
   one program
+
+To increase the number of available ephemeral ports, which needed for
+e.g. load testing.
+
+$ sudo sysctl -w net.inet.ip.portrange.hifirst=1024
+$ sudo sysctl -w net.inet.ip.portrange.first=1024
+# ulimit -n 65536
