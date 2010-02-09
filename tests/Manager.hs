@@ -6,11 +6,13 @@ import Control.Exception (finally)
 import Control.Monad (replicateM_)
 import Foreign.C.Error (throwErrnoIfMinus1_)
 import Foreign.Marshal (alloca)
+import Network.Socket hiding (shutdown)
 import System.Event.Control (setNonBlockingFD)
 import System.Event.Internal (Backend)
 import System.Event.Manager
 import System.Posix.IO (createPipe)
-import System.Posix.Internals (c_read, c_write)
+import System.Posix.Internals (c_close, c_read, c_write)
+import System.Posix.Types (Fd)
 import Test.HUnit (Assertion, assertBool, assertEqual)
 import qualified System.Event.EPoll as EPoll
 import qualified System.Event.KQueue as KQueue
@@ -31,10 +33,8 @@ withBackend what act = do
 createN :: IO Backend -> Assertion
 createN what = replicateM_ 10000 . withBackend what $ \_mgr -> return ()
 
--- Send and receive a single byte through a pipe.
-pipe :: IO Backend -> Assertion
-pipe what = withBackend what $ \mgr -> do
-  (rd,wr) <- createPipe
+fdPair :: EventManager -> Fd -> Fd -> IO ()
+fdPair mgr rd wr = do
   setNonBlockingFD (fromIntegral rd)
   setNonBlockingFD (fromIntegral wr)
   done <- newEmptyMVar
@@ -54,11 +54,25 @@ pipe what = withBackend what $ \mgr -> do
   registerFd mgr canRead rd evtRead
   registerFd mgr canWrite wr evtWrite
   takeMVar done
+  c_close (fromIntegral rd)
+  c_close (fromIntegral wr)
+  return ()
+
+-- Send and receive a single byte through a pipe.
+pipe :: IO Backend -> Assertion
+pipe what = withBackend what $ \mgr -> uncurry (fdPair mgr) =<< createPipe
+
+socketpair :: IO Backend -> Assertion
+socketpair what = withBackend what $ \mgr -> do
+  (a,b) <- socketPair AF_UNIX Stream defaultProtocol
+  fdPair mgr (fromSocket a) (fromSocket b)
+ where fromSocket (MkSocket a _ _ _ _) = fromIntegral a
 
 backendTests :: IO Backend -> [F.Test]
 backendTests what = map ($what) [
    F.testCase "createN" . createN
  , F.testCase "pipe" . pipe
+ , F.testCase "socketpair" . socketpair
  ]
 
 tests :: F.Test
