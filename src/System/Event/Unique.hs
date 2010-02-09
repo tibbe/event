@@ -25,3 +25,4 @@ newUnique :: UniqueSource -> IO Unique
 newUnique (US ref) = do
     !v <- atomicModifyIORef ref $ \u -> let !u' = u+1 in (u', Unique u)
     return v -- be careful with modify functions!
+{-# INLINE newUnique #-}
