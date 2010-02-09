@@ -1,4 +1,6 @@
 ghc-opt-flags = -O2
+cc = gcc
+cc-opt-flags = -O2
 
 include ../tests/common.mk
 
@@ -8,7 +10,7 @@ ifdef USE_GHC_IO_MANAGER
 	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
 endif
 
-programs := dead-conn pong-server signal simple thread-delay timers
+programs := dead-conn deadconn pong-server signal simple thread-delay timers
 
 .PHONY: all
 all: $(programs)
@@ -17,6 +19,10 @@ dead-conn: ghc-flags += $(ghc-bench-flags)
 dead-conn: $(lib) Args.o EventSocket.o DeadConn.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
+
+# A C version of the above tool.
+deadconn: deadconn.o
+	$(cc) $(cc-opt-flags) -o $@ $(filter %.o,$^)
 
 pong-server: ghc-flags += $(ghc-bench-flags)
 pong-server: $(lib) Args.o EventSocket.o PongServer.o
@@ -42,6 +48,9 @@ timers: $(lib) Args.o Timers.o
 
 %.o: %.hs
 	$(ghc) $(ghc-flags) $(ghc-opt-flags) -c -o $@ $<
+
+%.o: %.c
+	$(cc) $(cc-opt-flags) -c -o $@ $<
 
 .PHONY: clean
 clean:
