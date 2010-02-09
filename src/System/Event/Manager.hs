@@ -225,13 +225,13 @@ registerFd_ EventManager{..} cb fd evs = do
     let fd'  = fromIntegral fd
         reg  = FdKey fd u
         !fdd = FdData reg evs cb
-        (!newMap, (oldEvs, newEvs)) =
+        (!newKey, (oldEvs, newEvs)) =
             case IM.insertWith (++) fd' [fdd] oldMap of
               (Nothing,   n) -> (n, (mempty, evs))
-              (Just prev, n) -> (n, pairEvents prev newMap fd')
+              (Just prev, n) -> (n, pairEvents prev newKey fd')
         modify = oldEvs /= newEvs
     when modify $ I.modifyFd emBackend fd oldEvs newEvs
-    return (newMap, (reg, modify))
+    return (newKey, (reg, modify))
 {-# INLINE registerFd_ #-}
 
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@
@@ -304,8 +304,13 @@ registerTimeout mgr ms cb = do
       now <- getCurrentTime
       let expTime = fromIntegral ms / 1000.0 + now
 
-      !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
-            let q' = Q.insert key expTime cb q in (q', q')
+      -- We intentionally do not evaluate the modified map to WHNF here.
+      -- Instead, we leave a thunk inside the IORef and defer its
+      -- evaluation until mkTimeout in the event loop.  This is a
+      -- workaround for a nasty IORef contention problem that causes the
+      -- thread-delay benchmark to take 20 seconds instead of 0.2.
+      _ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
+           let q' = Q.insert key expTime cb q in (q', q')
       wakeManager mgr
   return $! TK key
 
