@@ -33,6 +33,19 @@ withBackend what act = do
 createN :: IO Backend -> Assertion
 createN what = replicateM_ 10000 . withBackend what $ \_mgr -> return ()
 
+-- Send and receive a single byte through a pipe.
+pipe :: IO Backend -> Assertion
+pipe what = withBackend what $ \mgr -> uncurry (fdPair mgr) =<< createPipe
+
+-- Send and receive a single byte through a Unix socket pair.
+socketpair :: IO Backend -> Assertion
+socketpair what = withBackend what $ \mgr -> do
+  (a,b) <- socketPair AF_UNIX Stream defaultProtocol
+  fdPair mgr (fromSocket a) (fromSocket b)
+ where fromSocket (MkSocket a _ _ _ _) = fromIntegral a
+
+-- Send and receive a single byte through a connected pair of file
+-- descriptors.
 fdPair :: EventManager -> Fd -> Fd -> IO ()
 fdPair mgr rd wr = go `finally` do c_close (fromIntegral rd)
                                    c_close (fromIntegral wr)
@@ -59,17 +72,6 @@ fdPair mgr rd wr = go `finally` do c_close (fromIntegral rd)
     registerFd mgr canRead rd evtRead
     registerFd mgr canWrite wr evtWrite
     takeMVar done
-
--- Send and receive a single byte through a pipe.
-pipe :: IO Backend -> Assertion
-pipe what = withBackend what $ \mgr -> uncurry (fdPair mgr) =<< createPipe
-
--- Send and receive a single byte through a Unix socket pair.
-socketpair :: IO Backend -> Assertion
-socketpair what = withBackend what $ \mgr -> do
-  (a,b) <- socketPair AF_UNIX Stream defaultProtocol
-  fdPair mgr (fromSocket a) (fromSocket b)
- where fromSocket (MkSocket a _ _ _ _) = fromIntegral a
 
 backendTests :: IO Backend -> [F.Test]
 backendTests what = map ($what) [
