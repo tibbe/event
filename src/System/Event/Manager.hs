@@ -9,7 +9,9 @@ module System.Event.Manager
     , newDefaultBackend
 
       -- * Running
+    , finished
     , loop
+    , shutdown
     , wakeManager
 
       -- * Registering interest in I/O events
@@ -37,9 +39,10 @@ module System.Event.Manager
 ------------------------------------------------------------------------
 -- Imports
 
-import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar, readMVar)
+import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newEmptyMVar,
+                                newMVar, putMVar, readMVar, takeMVar)
 import Control.Exception (finally)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, liftM, when)
 import Data.IORef (IORef, atomicModifyIORef, mkWeakIORef, newIORef, readIORef,
                    writeIORef)
 import Data.Monoid (mconcat, mempty)
@@ -88,14 +91,20 @@ newtype TimeoutKey   = TK Unique
 -- | Callback invoked on timeout events.
 type TimeoutCallback = IO ()
 
+data State = Created
+           | Running
+           | Finished
+             deriving (Eq, Show)
+
 -- | The event manager state.
 data EventManager = EventManager
     { emBackend      :: {-# UNPACK #-} !Backend
     , emFds          :: {-# UNPACK #-} !(MVar (IM.IntMap [FdData]))
     , emTimeouts     :: {-# UNPACK #-} !(IORef (Q.PSQ TimeoutCallback))
-    , emKeepRunning  :: {-# UNPACK #-} !(IORef Bool)
+    , emState        :: {-# UNPACK #-} !(IORef State)
     , emUniqueSource :: {-# UNPACK #-} !UniqueSource
     , emControl      :: {-# UNPACK #-} !Control
+    , emFinished     :: {-# UNPACK #-} !(MVar ())
     }
 
 ------------------------------------------------------------------------
@@ -106,7 +115,7 @@ handleControlEvent mgr reg _evt = do
   msg <- readControlMessage (emControl mgr) (keyFd reg)
   case msg of
     CMsgWakeup -> return ()
-    CMsgDie    -> writeIORef (emKeepRunning mgr) False
+    CMsgDie    -> writeIORef (emState mgr) Finished
 
 newDefaultBackend :: IO Backend
 #if defined(HAVE_KQUEUE)
@@ -128,32 +137,64 @@ newWith be = do
   iofds <- newMVar IM.empty
   timeouts <- newIORef Q.empty
   ctrl <- newControl
-  run <- newIORef True
+  state <- newIORef Created
   us <- newSource
-  _ <- mkWeakIORef run $ closeControl ctrl
+  _ <- mkWeakIORef state $ do
+               st <- atomicModifyIORef state $ \s -> (Finished, s)
+               when (st /= Finished) $ do
+                 I.delete be
+                 closeControl ctrl
+  finished <- newEmptyMVar
   let mgr = EventManager { emBackend = be
                          , emFds = iofds
                          , emTimeouts = timeouts
-                         , emKeepRunning = run
+                         , emState = state
                          , emUniqueSource = us
                          , emControl = ctrl
+                         , emFinished = finished
                          }
   _ <- registerFd_ mgr (handleControlEvent mgr) (controlReadFd ctrl) evtRead
   _ <- registerFd_ mgr (handleControlEvent mgr) (wakeupReadFd ctrl) evtRead
   return mgr
 
+shutdown :: EventManager -> IO ()
+shutdown mgr = do
+  state <- readIORef (emState mgr)
+  when (state /= Finished) $ do
+    sendDie (emControl mgr)
+    takeMVar (emFinished mgr)
+
+finished :: EventManager -> IO Bool
+finished mgr = (== Finished) `liftM` readIORef (emState mgr)
+
+cleanup :: EventManager -> IO ()
+cleanup mgr@EventManager{..} = do
+  writeIORef emState Finished
+  I.delete emBackend
+  closeControl emControl
+  putMVar emFinished ()
+
 ------------------------------------------------------------------------
 -- Event loop
 
 -- | Start handling events.  This function loops until told to stop.
+--
+-- /Note/: This loop can only be run once per 'EventManager', as it
+-- closes all of its control resources when it finishes.
 loop :: EventManager -> IO ()
-loop mgr@EventManager{..} =
-    go `finally` I.delete emBackend >> closeControl emControl
-  where
+loop mgr@EventManager{..} = do
+  state <- atomicModifyIORef emState $ \s -> case s of
+                                               Created -> (Running, s)
+                                               _       -> (s, s)
+  when (state /= Created) .
+    error $ "System.Event.Manager.loop: state is already " ++ show state
+  go `finally` cleanup mgr
+ where
     go = do
       timeout <- mkTimeout
       I.poll emBackend timeout (onFdEvent mgr)
-      (`when` go) =<< readIORef emKeepRunning
+      state <- readIORef emState
+      when (state == Running) go
 
     -- | Call all expired timer callbacks and return the time to the
     -- next timeout.
