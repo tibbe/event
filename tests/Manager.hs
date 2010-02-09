@@ -34,34 +34,37 @@ createN :: IO Backend -> Assertion
 createN what = replicateM_ 10000 . withBackend what $ \_mgr -> return ()
 
 fdPair :: EventManager -> Fd -> Fd -> IO ()
-fdPair mgr rd wr = do
-  setNonBlockingFD (fromIntegral rd)
-  setNonBlockingFD (fromIntegral wr)
-  done <- newEmptyMVar
-  let canRead fdk evt = do
-        assertEqual "read fd" (keyFd fdk) rd
-        assertEqual "read event" evt evtRead
-        alloca $ \p ->
-          throwErrnoIfMinus1_ "read" $
-            c_read (fromIntegral (keyFd fdk)) p 1
-        putMVar done ()
-      canWrite fdk evt = do
-        assertEqual "write fd" (keyFd fdk) wr
-        assertEqual "write event" evt evtWrite
-        alloca $ \p ->
-          throwErrnoIfMinus1_ "write" $
-            c_write (fromIntegral (keyFd fdk)) p 1
-  registerFd mgr canRead rd evtRead
-  registerFd mgr canWrite wr evtWrite
-  takeMVar done
-  c_close (fromIntegral rd)
-  c_close (fromIntegral wr)
-  return ()
+fdPair mgr rd wr = go `finally` do c_close (fromIntegral rd)
+                                   c_close (fromIntegral wr)
+                                   return ()
+ where
+  go = do
+    setNonBlockingFD (fromIntegral rd)
+    setNonBlockingFD (fromIntegral wr)
+    done <- newEmptyMVar
+    let canRead fdk evt = do
+          assertEqual "read fd" (keyFd fdk) rd
+          assertEqual "read event" evt evtRead
+          alloca $ \p ->
+            throwErrnoIfMinus1_ "read" $
+              c_read (fromIntegral (keyFd fdk)) p 1
+          putMVar done ()
+        canWrite fdk evt = do
+          unregisterFd mgr fdk
+          assertEqual "write fd" (keyFd fdk) wr
+          assertEqual "write event" evt evtWrite
+          alloca $ \p ->
+            throwErrnoIfMinus1_ "write" $
+              c_write (fromIntegral (keyFd fdk)) p 1
+    registerFd mgr canRead rd evtRead
+    registerFd mgr canWrite wr evtWrite
+    takeMVar done
 
 -- Send and receive a single byte through a pipe.
 pipe :: IO Backend -> Assertion
 pipe what = withBackend what $ \mgr -> uncurry (fdPair mgr) =<< createPipe
 
+-- Send and receive a single byte through a Unix socket pair.
 socketpair :: IO Backend -> Assertion
 socketpair what = withBackend what $ \mgr -> do
   (a,b) <- socketPair AF_UNIX Stream defaultProtocol
