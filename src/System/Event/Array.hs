@@ -3,7 +3,6 @@
 module System.Event.Array
     (
       Array
-    , addFinalizer
     , capacity
     , clear
     , concat
@@ -78,9 +77,6 @@ reallocArray p newSize oldSize = reallocHack undefined p
             _ <- memcpy d s (fromIntegral (oldSize * size))
             return ()
       return dst
-
-addFinalizer :: Array a -> IO () -> IO ()
-addFinalizer (Array ref) fin = mkWeakIORef ref fin >> return ()
 
 new :: Storable a => Int -> IO (Array a)
 new c = do

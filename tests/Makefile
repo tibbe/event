@@ -1,15 +1,15 @@
 include common.mk
 
-ghc-test-flags := -package QuickCheck -package test-framework \
+ghc-test-flags := -package QuickCheck-1.2.0.0 -package test-framework \
 	-package test-framework-quickcheck -package HUnit \
-	-package test-framework-hunit
+	-package test-framework-hunit -package network
 
 .PHONY: run-tests
 run-tests: tests
 	./tests
 
 tests: ghc-flags += $(ghc-test-flags)
-tests: $(lib) Array.o PSQ.o RunTests.o
+tests: $(lib) Array.o Manager.o PSQ.o RunTests.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 

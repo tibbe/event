@@ -1,10 +1,12 @@
+import Network.Socket (withSocketsDo)
+import Test.Framework (defaultMain)
 import qualified Array
+import qualified Manager
 import qualified PSQ
 
-import Test.Framework (defaultMain)
-
 main :: IO ()
-main = defaultMain tests
+main = withSocketsDo $ defaultMain tests
   where tests = [ Array.tests
+                , Manager.tests
                 , PSQ.tests
                 ]

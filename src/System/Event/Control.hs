@@ -15,6 +15,8 @@ module System.Event.Control
     -- ** Control message sending
     , sendWakeup
     , sendDie
+    -- * Utilities
+    , setNonBlockingFD
     ) where
 
 #include "EventConfig.h"
