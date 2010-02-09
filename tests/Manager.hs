@@ -4,7 +4,7 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (finally)
 import Control.Monad (replicateM_)
-import Foreign.C.Error (throwErrnoIfMinus1_)
+import Foreign.C.Error (throwErrnoIfMinus1)
 import Foreign.Marshal (alloca)
 import Network.Socket hiding (shutdown)
 import System.Event.Control (setNonBlockingFD)
@@ -58,17 +58,19 @@ fdPair mgr rd wr = go `finally` do c_close (fromIntegral rd)
     let canRead fdk evt = do
           assertEqual "read fd" (keyFd fdk) rd
           assertEqual "read event" evt evtRead
-          alloca $ \p ->
-            throwErrnoIfMinus1_ "read" $
-              c_read (fromIntegral (keyFd fdk)) p 1
+          alloca $ \p -> do
+            n <- throwErrnoIfMinus1 "read" $
+                 c_read (fromIntegral (keyFd fdk)) p 1
+            assertEqual "read 1 byte" n 1
           putMVar done ()
         canWrite fdk evt = do
           unregisterFd mgr fdk
           assertEqual "write fd" (keyFd fdk) wr
           assertEqual "write event" evt evtWrite
-          alloca $ \p ->
-            throwErrnoIfMinus1_ "write" $
-              c_write (fromIntegral (keyFd fdk)) p 1
+          alloca $ \p -> do
+            n <- throwErrnoIfMinus1 "write" $
+                 c_write (fromIntegral (keyFd fdk)) p 1
+            assertEqual "wrote 1 byte" n 1
     registerFd mgr canRead rd evtRead
     registerFd mgr canWrite wr evtWrite
     takeMVar done
