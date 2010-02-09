@@ -12,6 +12,7 @@
 module System.Event.EPoll
     (
       new
+    , available
     ) where
 
 import qualified System.Event.Internal as E
@@ -20,6 +21,10 @@ import qualified System.Event.Internal as E
 #if !defined(HAVE_EPOLL)
 new :: IO E.Backend
 new = error "EPoll back end not implemented for this platform"
+
+available :: Bool
+available = False
+{-# INLINE available #-}
 #else
 
 #include <sys/epoll.h>
@@ -38,9 +43,12 @@ import System.Posix.Internals (c_close)
 import System.Posix.Internals (setCloseOnExec)
 #endif
 import System.Posix.Types (Fd(..))
-
 import qualified System.Event.Array    as A
 import           System.Event.Internal (Timeout(..))
+
+available :: Bool
+available = True
+{-# INLINE available #-}
 
 data EPoll = EPoll {
       epollFd     :: {-# UNPACK #-} !EPollFd
@@ -52,7 +60,6 @@ new :: IO E.Backend
 new = do
   epfd <- epollCreate
   evts <- A.new 64
-  A.addFinalizer evts $ c_close (fromEPollFd epfd) >> return ()
   return $! E.backend poll modifyFd delete (EPoll epfd evts)
 
 delete :: EPoll -> IO ()

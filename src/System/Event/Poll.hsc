@@ -3,6 +3,7 @@
 module System.Event.Poll
     (
       new
+    , available
     ) where
 
 #include "EventConfig.h"
@@ -10,6 +11,10 @@ module System.Event.Poll
 #if !defined(HAVE_POLL_H)
 new :: IO E.Backend
 new = error "Poll back end not implemented for this platform"
+
+available :: Bool
+available = False
+{-# INLINE available #-}
 #else
 #include <poll.h>
 
@@ -23,6 +28,10 @@ import Foreign.Storable (Storable(..))
 import qualified System.Event.Array as A
 import qualified System.Event.Internal as E
 import System.Posix.Types (Fd(..))
+
+available :: Bool
+available = True
+{-# INLINE available #-}
 
 data Poll = Poll {
       pollChanges :: {-# UNPACK #-} !(MVar (A.Array PollFd))

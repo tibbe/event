@@ -4,6 +4,7 @@
 module System.Event.KQueue
     (
       new
+    , available
     ) where
 
 import System.Posix.Internals (c_close)
@@ -13,6 +14,10 @@ import qualified System.Event.Internal as E
 #if !defined(HAVE_KQUEUE)
 new :: IO E.Backend
 new = error "KQueue back end not implemented for this platform"
+
+available :: Bool
+available = False
+{-# INLINE available #-}
 #else
 
 import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
@@ -46,6 +51,10 @@ import Foreign.C.Types (CUInt)
 # define NOTE_EOF 0
 #endif
 
+available :: Bool
+available = True
+{-# INLINE available #-}
+
 ------------------------------------------------------------------------
 -- Exported interface
 
@@ -60,7 +69,6 @@ new = do
   qfd <- kqueue
   changes <- newMVar =<< A.empty
   events <- A.new 64
-  A.addFinalizer events $ c_close (fromQueueFd qfd) >> return ()
   return $! E.backend poll modifyFd delete (EventQueue qfd changes events)
 
 delete :: EventQueue -> IO ()
