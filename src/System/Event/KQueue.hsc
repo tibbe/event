@@ -6,6 +6,7 @@ module System.Event.KQueue
       new
     ) where
 
+import System.Posix.Internals (c_close)
 import qualified System.Event.Internal as E
 
 #include "EventConfig.h"
