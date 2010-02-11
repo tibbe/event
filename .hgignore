@@ -17,6 +17,8 @@ include/EventConfig.h.in
 .*.swp
 *.hi
 *.o
+*.eventlog
+*.hp
 Setup
 Setup.exe*
 strace.out
