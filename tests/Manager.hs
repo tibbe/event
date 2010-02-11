@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Manager (tests) where
 
 import Control.Concurrent (forkIO)
@@ -52,8 +53,13 @@ fdPair mgr rd wr = go `finally` do c_close (fromIntegral rd)
                                    return ()
  where
   go = do
+#if __GLASGOW_HASKELL__ > 611
+    setNonBlockingFD (fromIntegral rd) True
+    setNonBlockingFD (fromIntegral wr) True
+#else
     setNonBlockingFD (fromIntegral rd)
     setNonBlockingFD (fromIntegral wr)
+#endif
     done <- newEmptyMVar
     let canRead fdk evt = do
           assertEqual "read fd" (keyFd fdk) rd
@@ -83,7 +89,7 @@ backendTests what = map ($what) [
  ]
 
 tests :: F.Test
-tests = F.testGroup "System.Event.Manager" [ group | (available, group) <- [ 
+tests = F.testGroup "System.Event.Manager" [ group | (available, group) <- [
           (EPoll.available,  F.testGroup "EPoll"  $ backendTests EPoll.new)
         , (KQueue.available, F.testGroup "KQueue" $ backendTests KQueue.new)
         , (Poll.available,   F.testGroup "Poll"   $ backendTests Poll.new)

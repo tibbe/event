@@ -10,6 +10,10 @@ ifdef USE_GHC_IO_MANAGER
 	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
 endif
 
+ifdef USE_EVENTLOG
+	ghc-bench-flags += -eventlog
+endif
+
 programs := dead-conn deadconn pong-server signal simple thread-delay timers
 
 .PHONY: all
