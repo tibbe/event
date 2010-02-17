@@ -1,3 +1,7 @@
+See benchmarks/benchmark_shell.py for a script that automates the
+setup and teardown of the various configuration options listed below.
+
+
 Increasing the maximum number of open files
 ===========================================
 
