@@ -33,7 +33,6 @@ import Network.Socket.Internal
 import Prelude hiding (repeat)
 import System.Event.Thread
 import System.IO.Error (ioeSetErrorString, mkIOError)
-import System.Posix.Internals
 import EventUtil
 
 connect :: Socket    -- Unconnected Socket
@@ -134,11 +133,7 @@ accept (MkSocket s family stype protocol _status) = do
         new_sock <- throwSocketErrorIfMinus1RetryMayBlock "accept"
                     (threadWaitRead (fromIntegral s)) $
                     c_accept s sockaddr ptr_len
-#if __GLASGOW_HASKELL__ > 611
-        setNonBlockingFD new_sock True
-#else
-        setNonBlockingFD new_sock
-#endif
+        setNonBlocking (fromIntegral new_sock)
         addr <- peekSockAddr sockaddr
         new_status <- newMVar Connected
         return (MkSocket new_sock family stype protocol new_status, addr)

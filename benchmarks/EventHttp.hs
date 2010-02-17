@@ -1,10 +1,12 @@
 {-# LANGUAGE ForeignFunctionInterface, OverloadedStrings #-}
 
 import Control.Concurrent
+import Control.Exception (finally)
 import Control.Monad
 import Control.Monad.Error
-import GHC.Conc
+import GHC.Conc hiding (ensureIOManagerIsRunning)
 import System.Event as E
+import System.Event.Thread
 import Foreign.C.Error
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
@@ -14,6 +16,7 @@ import System.Posix.Types
 import Network.Socket hiding (accept, recv)
 import Network.Socket.Internal
 import EventSocket (recv, sendAll)
+import EventUtil (setNonBlocking)
 import Data.ByteString.Char8 as B
 
 main = do
@@ -77,14 +80,14 @@ accept mgr sock@(MkSocket fd family stype proto _status) serve = do
                 sa <- peekSockAddr sockaddr
                 return $! Right (n, sa)
   blocking mgr (Left (fromIntegral fd,evtRead)) act $ \_efdk (nfd,addr) -> do
+    setNonBlocking (fromIntegral nfd)
     nsock <- MkSocket nfd family stype proto `fmap` newMVar Connected
     serve mgr nsock addr
             
 client :: EventManager -> Socket -> SockAddr -> IO ()
-client _mgr sock _addr = do
+client _mgr sock _addr = (`finally` sClose sock) $ do
   recvRequest ""
   sendAll sock msg
-  sClose sock
  where
   msg = "HTTP/1.0 200 OK\r\nConnection: Close\r\nContent-Length: 5\r\n\r\nPong!"
   recvRequest r = do

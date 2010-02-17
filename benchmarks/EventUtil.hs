@@ -1,12 +1,17 @@
+{-# LANGUAGE CPP #-}
+
 module EventUtil
     (
-      throwErrnoIfMinus1Retry_mayBlock
+      setNonBlocking
+    , throwErrnoIfMinus1Retry_mayBlock
     , throwErrnoIfMinus1Retry_repeatOnBlock
     ) where
 
 import Foreign.C.Error (eINTR, eWOULDBLOCK, eAGAIN, getErrno, throwErrno)
 import Foreign.C.Types (CInt)
 import Prelude hiding (repeat)
+import System.Posix.Internals (setNonBlockingFD)
+import System.Posix.Types (Fd)
 
 {-# SPECIALISE
     throwErrnoIfMinus1Retry_mayBlock
@@ -28,3 +33,11 @@ throwErrnoIfMinus1Retry_repeatOnBlock :: Num a => String -> IO b -> IO a -> IO a
 throwErrnoIfMinus1Retry_repeatOnBlock name on_block act = do
   throwErrnoIfMinus1Retry_mayBlock name (on_block >> repeat) act
   where repeat = throwErrnoIfMinus1Retry_repeatOnBlock name on_block act
+
+setNonBlocking :: Fd -> IO ()
+setNonBlocking fd =
+#if __GLASGOW_HASKELL__ > 611
+    setNonBlockingFD (fromIntegral fd) True
+#else
+    setNonBlockingFD (fromIntegral fd)
+#endif
