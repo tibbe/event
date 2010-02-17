@@ -19,6 +19,7 @@ benchmarks/PSQ
 benchmarks/Simple
 benchmarks/dead-conn
 benchmarks/deadconn
+benchmarks/event-http
 benchmarks/pong-server
 benchmarks/simple
 benchmarks/static-http

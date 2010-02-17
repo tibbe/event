@@ -5,7 +5,7 @@ cc-opt-flags = -O2
 include ../tests/common.mk
 
 ghc-bench-flags := -package network -package network-bytestring \
-	-package attoparsec -package bytestring-show
+	-package attoparsec -package bytestring-show -package mtl
 
 ifdef USE_GHC_IO_MANAGER
 	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
@@ -31,6 +31,11 @@ deadconn: deadconn.o
 
 pong-server: ghc-flags += $(ghc-bench-flags)
 pong-server: $(lib) Args.o EventUtil.o EventSocket.o PongServer.o
+	ranlib $(lib)
+	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
+
+event-http: ghc-flags += $(ghc-bench-flags)
+event-http: $(lib) EventUtil.o EventFile.o EventSocket.o NoPush.o RFC2616.o EventHttp.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
