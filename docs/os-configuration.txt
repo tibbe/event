@@ -17,3 +17,15 @@ e.g. load testing.
 $ sudo sysctl -w net.inet.ip.portrange.hifirst=1024
 $ sudo sysctl -w net.inet.ip.portrange.first=1024
 # ulimit -n 65536
+
+== Linux ==
+
+To increase the number of available ephemeral ports, which needed for
+e.g. load testing.
+
+$ sudo sysctl -w net.ipv4.tcp_fin_timeout="15"
+$ sudo sysctl -w net.ipv4.tcp_tw_reuse="1"
+$ sudo sysctl -w net.ipv4.tcp_tw_recycle="1"
+$ sudo sysctl -w net.ipv4.tcp_max_syn_backlog="16384"
+$ sudo sysctl -w net.ipv4.ip_local_port_range="1024 65535"
+$ ulimit -n 131072
