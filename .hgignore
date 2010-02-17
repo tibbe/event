@@ -6,6 +6,7 @@ autom4te.cache
 benchmarks/IntMap
 benchmarks/PSQ
 benchmarks/Simple
+benchmarks/static-http
 config.log
 config.mk
 config.status
@@ -31,3 +32,4 @@ benchmarks/simple
 benchmarks/thread-delay
 benchmarks/timers
 tests/tests
+benchmarks/NoPush.hs

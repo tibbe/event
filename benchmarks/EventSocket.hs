@@ -23,7 +23,11 @@ import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr, castPtr)
 import Foreign.C.Error (Errno(..), eINPROGRESS, eINTR, eWOULDBLOCK, eAGAIN,
                         errnoToIOError, getErrno, throwErrno)
+#if __GLASGOW_HASKELL__ < 612
 import GHC.IOBase (IOErrorType(..))
+#else
+import GHC.IO.Exception (IOErrorType(..))
+#endif
 import Network.Socket hiding (accept, connect, recv, send)
 import Network.Socket.Internal
 import Prelude hiding (repeat)

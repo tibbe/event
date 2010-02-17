@@ -4,7 +4,8 @@ cc-opt-flags = -O2
 
 include ../tests/common.mk
 
-ghc-bench-flags := -package network -package network-bytestring
+ghc-bench-flags := -package network -package network-bytestring \
+	-package attoparsec -package bytestring-show
 
 ifdef USE_GHC_IO_MANAGER
 	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
@@ -14,7 +15,7 @@ ifdef USE_EVENTLOG
 	ghc-bench-flags += -eventlog
 endif
 
-programs := dead-conn deadconn pong-server signal simple thread-delay timers
+programs := dead-conn deadconn pong-server signal simple static-http thread-delay timers
 
 .PHONY: all
 all: $(programs)
@@ -30,6 +31,11 @@ deadconn: deadconn.o
 
 pong-server: ghc-flags += $(ghc-bench-flags)
 pong-server: $(lib) Args.o EventSocket.o PongServer.o
+	ranlib $(lib)
+	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
+
+static-http: ghc-flags += $(ghc-bench-flags)
+static-http: $(lib) EventFile.o EventSocket.o NoPush.o RFC2616.o StaticHttp.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
@@ -55,6 +61,9 @@ timers: $(lib) Args.o Timers.o
 
 %.o: %.c
 	$(cc) $(cc-opt-flags) -c -o $@ $<
+
+%.hs: %.hsc
+	hsc2hs $<
 
 .PHONY: clean
 clean:

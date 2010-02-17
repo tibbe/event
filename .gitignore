@@ -30,3 +30,5 @@ benchmarks/simple
 benchmarks/thread-delay
 benchmarks/timers
 tests/tests
+benchmarks/static-http
+benchmarks/NoPush.hs

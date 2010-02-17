@@ -8,7 +8,7 @@
 --   ab -n 10000 -c 100 http://localhost:5002/
 
 import Args (ljust, parseArgs, positive, theLast)
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, runInUnboundThread)
 import Data.ByteString.Char8 ()
 import Data.Function (on)
 import Data.Monoid (Monoid(..), Last(..))
@@ -20,10 +20,10 @@ import Network.Socket (accept)
 import Network.Socket.ByteString (recv, sendAll)
 #else
 import EventSocket (accept, recv, sendAll)
+import System.Event.Thread (ensureIOManagerIsRunning)
 #endif
 import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
-import System.Event.Thread (ensureIOManagerIsRunning)
 import System.Posix.Resource (ResourceLimit(..), ResourceLimits(..),
                               Resource(..), setResourceLimit)
 
@@ -43,7 +43,7 @@ main = do
   setSocketOption sock ReuseAddr 1
   bindSocket sock (addrAddress ai)
   listen sock maxListenQueue
-  acceptConnections sock
+  runInUnboundThread $ acceptConnections sock
 
 acceptConnections :: Socket -> IO ()
 acceptConnections sock = loop

@@ -4,7 +4,7 @@
 -- number of milliseconds and wait for them all to finish.
 
 import Args (ljust, parseArgs, positive, theLast)
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, runInUnboundThread)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Monad (when)
 import Data.Function (on)
@@ -36,8 +36,7 @@ main = do
                        let !b = a+1 in (b,b)
                    when (a == numThreads) $ putMVar done ()
                 loop (i + 1)
-    loop 0
-    takeMVar done
+    runInUnboundThread $ loop 0 >> takeMVar done
 
 ------------------------------------------------------------------------
 -- Configuration

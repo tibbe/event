@@ -61,7 +61,7 @@ main = withSocketsDo $ do
     putStrLn $ show numConns ++ " threads looping"
 
     -- Block process forever.
-    threadDelay maxBound
+    --threadDelay maxBound
 
 request = "GET / HTTP/1.1\r\nHost: www.test.com\r\n\r\n"
 
