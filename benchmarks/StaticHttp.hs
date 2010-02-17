@@ -3,6 +3,7 @@
 import Control.Concurrent (forkIO, runInUnboundThread)
 import Control.Exception (bracket, finally)
 import Control.Monad (unless)
+import Control.Monad.Fix (fix)
 import qualified Data.Attoparsec as A
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as L
@@ -73,8 +74,7 @@ client sock = (`finally` sClose sock) $ do
             fixedHeaders
           , B.append "Content-length: " . strict . S.show . asInt . fileSize $ st
           ]
-        let go = do
-              s <- F.read fd 65536
-              unless (B.null s) $ sendAll sock s >> go
-        go
+        fix $ \loop -> do
+          s <- F.read fd 16384
+          unless (B.null s) $ sendAll sock s >> loop
     _  -> sendAll sock "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"
