@@ -21,7 +21,7 @@ import Foreign.C.Types (CChar, CInt, CSize)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr, castPtr)
-import Foreign.C.Error (Errno(..), eINPROGRESS, eINTR, eWOULDBLOCK, eAGAIN,
+import Foreign.C.Error (Errno(..), eINPROGRESS, eINTR,
                         errnoToIOError, getErrno, throwErrno)
 #if __GLASGOW_HASKELL__ < 612
 import GHC.IOBase (IOErrorType(..))
@@ -34,6 +34,7 @@ import Prelude hiding (repeat)
 import System.Event.Thread
 import System.IO.Error (ioeSetErrorString, mkIOError)
 import System.Posix.Internals
+import EventUtil
 
 connect :: Socket    -- Unconnected Socket
         -> SockAddr  -- Socket address stuff
@@ -141,27 +142,6 @@ accept (MkSocket s family stype protocol _status) = do
         addr <- peekSockAddr sockaddr
         new_status <- newMVar Connected
         return (MkSocket new_sock family stype protocol new_status, addr)
-
-{-# SPECIALISE
-    throwErrnoIfMinus1Retry_mayBlock
-         :: String -> IO CInt -> IO CInt -> IO CInt #-}
-throwErrnoIfMinus1Retry_mayBlock :: Num a => String -> IO a -> IO a -> IO a
-throwErrnoIfMinus1Retry_mayBlock name on_block act = do
-    res <- act
-    if res == -1
-        then do
-            err <- getErrno
-            if err == eINTR
-                then throwErrnoIfMinus1Retry_mayBlock name on_block act
-                else if err == eWOULDBLOCK || err == eAGAIN
-                        then on_block
-                        else throwErrno name
-        else return res
-
-throwErrnoIfMinus1Retry_repeatOnBlock :: Num a => String -> IO b -> IO a -> IO a
-throwErrnoIfMinus1Retry_repeatOnBlock name on_block act = do
-  throwErrnoIfMinus1Retry_mayBlock name (on_block >> repeat) act
-  where repeat = throwErrnoIfMinus1Retry_repeatOnBlock name on_block act
 
 mkInvalidRecvArgError :: String -> IOError
 mkInvalidRecvArgError loc = ioeSetErrorString (mkIOError

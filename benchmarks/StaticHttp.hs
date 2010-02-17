@@ -57,7 +57,7 @@ asInt = fromIntegral
 
 client :: Socket -> IO ()
 client sock = (`finally` sClose sock) $ do
-  -- setNoPush sock True
+  setNoPush sock True
   (_bs, ereq) <- parseM (recv sock 4096) request
   case ereq of
     Right (req,hdrs) | requestMethod req == "GET" ->
@@ -74,7 +74,7 @@ client sock = (`finally` sClose sock) $ do
           , B.append "Content-length: " . strict . S.show . asInt . fileSize $ st
           ]
         let go = do
-              s <- F.read fd 16384
+              s <- F.read fd 65536
               unless (B.null s) $ sendAll sock s >> go
         go
     _  -> sendAll sock "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"

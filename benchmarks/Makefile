@@ -21,7 +21,7 @@ programs := dead-conn deadconn pong-server signal simple static-http thread-dela
 all: $(programs)
 
 dead-conn: ghc-flags += $(ghc-bench-flags)
-dead-conn: $(lib) Args.o EventSocket.o DeadConn.o
+dead-conn: $(lib) Args.o EventUtil.o EventSocket.o DeadConn.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
@@ -30,12 +30,12 @@ deadconn: deadconn.o
 	$(cc) $(cc-opt-flags) -o $@ $(filter %.o,$^)
 
 pong-server: ghc-flags += $(ghc-bench-flags)
-pong-server: $(lib) Args.o EventSocket.o PongServer.o
+pong-server: $(lib) Args.o EventUtil.o EventSocket.o PongServer.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
 static-http: ghc-flags += $(ghc-bench-flags)
-static-http: $(lib) EventFile.o EventSocket.o NoPush.o RFC2616.o StaticHttp.o
+static-http: $(lib) EventUtil.o EventFile.o EventSocket.o NoPush.o RFC2616.o StaticHttp.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 

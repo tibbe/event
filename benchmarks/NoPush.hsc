@@ -30,5 +30,5 @@ setNoPush (MkSocket fd _ _ _ _) onOff = do
     throwErrnoIfMinus1_ "setNoPush" $
       c_setsockopt fd (#const IPPROTO_TCP) noPush ptr (fromIntegral (sizeOf v))
 
-foreign import stdcall unsafe "setsockopt"
+foreign import ccall unsafe "setsockopt"
   c_setsockopt :: CInt -> CInt -> CInt -> Ptr CInt -> CInt -> IO CInt
