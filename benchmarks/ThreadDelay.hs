@@ -5,14 +5,13 @@
 
 import Args (ljust, parseArgs, positive, theLast)
 import Control.Concurrent (forkIO, runInUnboundThread)
-import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Monad (when)
 import Data.Function (on)
 import Data.Monoid (Monoid(..), Last(..))
-import Data.IORef (atomicModifyIORef, newIORef)
 import System.Console.GetOpt (ArgDescr(ReqArg), OptDescr(..))
 import System.Environment (getArgs)
 import System.Event.Thread (ensureIOManagerIsRunning)
+import Control.Concurrent.STM
 
 #ifdef USE_GHC_IO_MANAGER
 import Control.Concurrent (threadDelay)
@@ -25,18 +24,24 @@ main = do
     let numThreads = theLast cfgNumThreads cfg
 
     ensureIOManagerIsRunning
-    done <- newEmptyMVar
-    ref <- newIORef 0
+    done <- newTVarIO False
+    ref <- newTVarIO 0
     let loop :: Int -> IO ()
         loop i = do
             when (i < numThreads) $ do
                 _ <- forkIO $ do
                    threadDelay 1000
-                   a <- atomicModifyIORef ref $ \a ->
-                       let !b = a+1 in (b,b)
-                   when (a == numThreads) $ putMVar done ()
+                   atomically $ do
+                     a <- readTVar ref
+                     let !b = a+1
+                     writeTVar ref b
+                     when (b == numThreads) $ writeTVar done True
                 loop (i + 1)
-    runInUnboundThread $ loop 0 >> takeMVar done
+    runInUnboundThread $ do
+      loop 0
+      atomically $ do
+        b <- readTVar done
+        when (not b) retry
 
 ------------------------------------------------------------------------
 -- Configuration

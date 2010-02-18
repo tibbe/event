@@ -5,7 +5,7 @@ cc-opt-flags = -O2
 include ../tests/common.mk
 
 ghc-bench-flags := -package network -package network-bytestring \
-	-package attoparsec -package bytestring-show -package mtl
+	-package attoparsec -package bytestring-show -package mtl -package stm
 
 ifdef USE_GHC_IO_MANAGER
 	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
