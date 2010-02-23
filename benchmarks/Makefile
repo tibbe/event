@@ -5,7 +5,7 @@ cc-opt-flags = -O2
 include ../tests/common.mk
 
 ghc-bench-flags := -package network -package network-bytestring \
-	-package attoparsec -package bytestring-show -package mtl -package stm
+	-package attoparsec -package bytestring-show -package mtl
 
 ifdef USE_GHC_IO_MANAGER
 	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
@@ -52,7 +52,7 @@ simple: $(lib) Args.o Simple.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
-thread-delay: ghc-flags += $(ghc-bench-flags)
+thread-delay: ghc-flags += $(ghc-bench-flags) -package stm
 thread-delay: $(lib) Args.o ThreadDelay.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)

@@ -8,7 +8,14 @@ module System.Event.Unique
     ) where
 
 import Data.Int (Int64)
-import Control.Concurrent.STM
+import GHC.Conc (TVar, atomically, newTVarIO, readTVar, writeTVar)
+
+-- We used to use IORefs here, but Simon switched us to STM when we
+-- found that our use of atomicModifyIORef was subject to a severe RTS
+-- performance problem when used in a tight loop from multiple
+-- threads: http://hackage.haskell.org/trac/ghc/ticket/3838
+--
+-- There seems to be no performance cost to using a TVar instead.
 
 newtype UniqueSource = US (TVar Int64)
 
@@ -22,10 +29,9 @@ newSource :: IO UniqueSource
 newSource = US `fmap` newTVarIO 0
 
 newUnique :: UniqueSource -> IO Unique
-newUnique (US ref) = do
-    atomically $ do 
-      u <- readTVar ref
-      let !u' = u+1
-      writeTVar ref u'
-      return (Unique u')
+newUnique (US ref) = atomically $ do 
+  u <- readTVar ref
+  let !u' = u+1
+  writeTVar ref u'
+  return $! Unique u'
 {-# INLINE newUnique #-}
