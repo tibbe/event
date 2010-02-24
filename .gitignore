@@ -4,6 +4,7 @@
 *.hp
 *.o
 *.orig
+*.prof
 *.tix
 *~
 .#*
