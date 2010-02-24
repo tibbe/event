@@ -11,6 +11,8 @@ module System.Event.Manager
       -- * Running
     , finished
     , loop
+    , init
+    , step
     , shutdown
     , wakeManager
 
@@ -46,6 +48,7 @@ import Control.Monad (forM_, liftM, when)
 import Data.IORef (IORef, atomicModifyIORef, mkWeakIORef, newIORef, readIORef,
                    writeIORef)
 import Data.Monoid (mconcat, mempty)
+import Prelude hiding (init)
 import System.Event.Clock (getCurrentTime)
 import System.Event.Control
 import System.Event.Internal (Backend, Event, evtRead, evtWrite, Timeout(..))
@@ -183,19 +186,26 @@ cleanup mgr@EventManager{..} = do
 -- closes all of its control resources when it finishes.
 loop :: EventManager -> IO ()
 loop mgr@EventManager{..} = do
+  init mgr
+  go `finally` cleanup mgr
+ where
+  go = step mgr >>= (`when` go)
+
+init :: EventManager -> IO ()
+init mgr@EventManager{..} = do
   state <- atomicModifyIORef emState $ \s -> case s of
                                                Created -> (Running, s)
                                                _       -> (s, s)
   when (state /= Created) .
-    error $ "System.Event.Manager.loop: state is already " ++ show state
-  go `finally` cleanup mgr
- where
-    go = do
+    error $ "System.Event.Manager.init: state is already " ++ show state
+
+step :: EventManager -> IO Bool
+step mgr@EventManager{..} = do
       timeout <- mkTimeout
       I.poll emBackend timeout (onFdEvent mgr)
       state <- readIORef emState
-      when (state == Running) go
-
+      return $! state == Running
+  where
     -- | Call all expired timer callbacks and return the time to the
     -- next timeout.
     mkTimeout :: IO Timeout
