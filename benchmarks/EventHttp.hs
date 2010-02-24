@@ -31,9 +31,14 @@ main = do
   listen sock maxListenQueue
   mgrs <- replicateM numCapabilities E.new
   done <- newEmptyMVar
+  let (MkSocket fd _ _ _ _) = sock
   forM_ mgrs $ \mgr -> do
-    forkIO $ E.loop mgr >> putMVar done ()
-    accept mgr sock client
+    forkIO $ do
+      E.init mgr
+      registerFd_ mgr (\ _ _ -> accept mgr sock client) (fromIntegral fd) evtRead
+      step mgr
+      print "nah"
+      putMVar done ()
   takeMVar done
 
 repeatOnIntr :: IO (Either Errno a) -> IO (Either Errno a)
@@ -46,24 +51,18 @@ repeatOnIntr act = do
     r            -> return r
 
 blocking :: EventManager
-         -> (Either (Fd,Event) FdKey)
          -> IO (Either Errno a)
-         -> (Either Fd FdKey -> a -> IO ())
+         -> (a -> IO ())
          -> IO ()
-blocking mgr efdk act on_success = do
+blocking mgr act on_success = do
   ret <- repeatOnIntr act
   case ret of
     Left err
         | err /= eWOULDBLOCK && err /= eAGAIN ->
             ioError (errnoToIOError "accept" err Nothing Nothing)
         | otherwise ->
-            case efdk of
-              Left (fd,evts) -> registerFd mgr retry fd evts >> return ()
-              Right _        -> return ()
-    Right a -> case efdk of
-                 Left (fd,_evts) -> on_success (Left fd) a
-                 Right fdk       -> on_success (Right fdk) a
- where retry fdk evt = blocking mgr (Right fdk) act on_success
+            step mgr >> return ()
+    Right a -> on_success a
 
 
 accept :: EventManager -> Socket
@@ -79,10 +78,11 @@ accept mgr sock@(MkSocket fd family stype proto _status) serve = do
               else do
                 sa <- peekSockAddr sockaddr
                 return $! Right (n, sa)
-  blocking mgr (Left (fromIntegral fd,evtRead)) act $ \_efdk (nfd,addr) -> do
+  blocking mgr act $ \(nfd,addr) -> do
     setNonBlocking (fromIntegral nfd)
     nsock <- MkSocket nfd family stype proto `fmap` newMVar Connected
-    serve mgr nsock addr
+    forkIO $ serve mgr nsock addr
+    accept mgr sock serve
             
 client :: EventManager -> Socket -> SockAddr -> IO ()
 client _mgr sock _addr = (`finally` sClose sock) $ do
