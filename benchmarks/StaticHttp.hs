@@ -81,6 +81,6 @@ client sock = (`finally` sClose sock) loop
             fix $ \sendLoop -> do
               s <- F.read fd 16384
               unless (B.null s) $ sendAll sock s >> sendLoop
-          loop
+          unless (requestProtocol req == "1.0") loop
       _ | B.null bs -> return ()
         | otherwise -> sendAll sock "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"
