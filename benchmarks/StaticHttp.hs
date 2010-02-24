@@ -56,25 +56,31 @@ parseM refill p = (step . A.parse p) =<< refill
 asInt :: Integral a => a -> Int
 asInt = fromIntegral
 
+withNoPush :: Socket -> IO a -> IO a
+withNoPush sock act = setNoPush sock True >> act `finally` setNoPush sock False
+
 client :: Socket -> IO ()
-client sock = (`finally` sClose sock) $ do
-  setNoPush sock True
-  (_bs, ereq) <- parseM (recv sock 4096) request
-  case ereq of
-    Right (req,hdrs) | requestMethod req == "GET" ->
-      bracket (openFd (B.unpack (requestUri req)) ReadOnly Nothing
-                      defaultFileFlags{nonBlock=True}) closeFd $ \fd -> do
-        st <- getFdStatus fd
-        let fixedHeaders = B.intercalate "\r\n" [
-                "HTTP/1.1 200 OK"
-              , "Content-type: application/octet-stream"
-              , "Connection: close"
+client sock = (`finally` sClose sock) loop
+ where
+  loop = do
+    (bs, ereq) <- parseM (recv sock 4096) request
+    case ereq of
+      Right (req,hdrs) | requestMethod req == "GET" ->
+        bracket (openFd (B.unpack (requestUri req)) ReadOnly Nothing
+                        defaultFileFlags{nonBlock=True}) closeFd $ \fd -> do
+          st <- getFdStatus fd
+          let fixedHeaders = B.intercalate "\r\n" [
+                  "HTTP/1.1 200 OK"
+                , "Content-type: application/octet-stream"
+                ]
+          withNoPush sock $ do
+            sendAll sock $! (`B.append` "\r\n\r\n") $ B.intercalate "\r\n" [
+                fixedHeaders
+              , B.append "Content-length: " . strict . S.show . asInt . fileSize $ st
               ]
-        sendAll sock $! (`B.append` "\r\n\r\n") $ B.intercalate "\r\n" [
-            fixedHeaders
-          , B.append "Content-length: " . strict . S.show . asInt . fileSize $ st
-          ]
-        fix $ \loop -> do
-          s <- F.read fd 16384
-          unless (B.null s) $ sendAll sock s >> loop
-    _  -> sendAll sock "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"
+            fix $ \sendLoop -> do
+              s <- F.read fd 16384
+              unless (B.null s) $ sendAll sock s >> sendLoop
+          loop
+      _ | B.null bs -> return ()
+        | otherwise -> sendAll sock "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"
