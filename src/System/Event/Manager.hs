@@ -201,25 +201,25 @@ init mgr@EventManager{..} = do
 
 step :: EventManager -> IO Bool
 step mgr@EventManager{..} = do
-      timeout <- mkTimeout
-      I.poll emBackend timeout (onFdEvent mgr)
-      state <- readIORef emState
-      return $! state == Running
-  where
-    -- | Call all expired timer callbacks and return the time to the
-    -- next timeout.
-    mkTimeout :: IO Timeout
-    mkTimeout = do
-        now <- getCurrentTime
-        (expired, q') <- atomicModifyIORef emTimeouts $ \q ->
-            let res@(_, q') = Q.atMost now q in (q', res)
-        sequence_ $ map Q.value expired
-        case Q.minView q' of
-            Nothing             -> return Forever
-            Just (Q.E _ t _, _) ->
-                -- This value will always be positive since the call
-                -- to 'atMost' above removed any timeouts <= 'now'
-                return $! Timeout (t - now)
+  timeout <- mkTimeout
+  I.poll emBackend timeout (onFdEvent mgr)
+  state <- readIORef emState
+  return $! state == Running
+ where
+  -- | Call all expired timer callbacks and return the time to the
+  -- next timeout.
+  mkTimeout :: IO Timeout
+  mkTimeout = do
+      now <- getCurrentTime
+      (expired, q') <- atomicModifyIORef emTimeouts $ \q ->
+          let res@(_, q') = Q.atMost now q in (q', res)
+      sequence_ $ map Q.value expired
+      case Q.minView q' of
+        Nothing             -> return Forever
+        Just (Q.E _ t _, _) ->
+            -- This value will always be positive since the call
+            -- to 'atMost' above removed any timeouts <= 'now'
+            return $! Timeout (t - now)
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
@@ -326,18 +326,18 @@ registerTimeout mgr ms cb = do
 
 unregisterTimeout :: EventManager -> TimeoutKey -> IO ()
 unregisterTimeout mgr (TK key) = do
-    !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
-          let q' = Q.delete key q in (q', q')
-    wakeManager mgr
+  !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
+        let q' = Q.delete key q in (q', q')
+  wakeManager mgr
 
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
 updateTimeout mgr (TK key) ms = do
-    now <- getCurrentTime
-    let expTime = fromIntegral ms / 1000.0 + now
+  now <- getCurrentTime
+  let expTime = fromIntegral ms / 1000.0 + now
 
-    !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
-          let q' = Q.adjust (const expTime) key q in (q', q')
-    wakeManager mgr
+  !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
+        let q' = Q.adjust (const expTime) key q in (q', q')
+  wakeManager mgr
 
 ------------------------------------------------------------------------
 -- Utilities
