@@ -8,6 +8,11 @@ module System.Event
       -- * Running
     , loop
 
+    -- ** Stepwise running
+    , init
+    , step
+    , shutdown
+
       -- * Registering interest in I/O events
     , Event
     , evtRead
@@ -15,7 +20,9 @@ module System.Event
     , IOCallback
     , FdKey(keyFd)
     , registerFd
+    , registerFd_
     , unregisterFd
+    , unregisterFd_
     , fdWasClosed
 
       -- * Registering interest in timeout events
@@ -26,4 +33,5 @@ module System.Event
     , unregisterTimeout
     ) where
 
+import Prelude hiding (init)
 import System.Event.Manager
