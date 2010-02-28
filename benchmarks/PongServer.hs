@@ -110,6 +110,6 @@ defaultOptions = [
           "maximum number of file descriptors"
     , Option [] ["listen-backlog"]
           (ReqArg (positive "maximum number of pending connections" $ \n ->
-               mempty { cfgMaxFds = n }) "N")
+               mempty { cfgListenBacklog = n }) "N")
           "maximum number of pending connections"
     ]
