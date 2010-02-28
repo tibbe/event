@@ -4,6 +4,8 @@ syntax: glob
 *.hp
 *.o
 *.orig
+*.p_hi
+*.p_o
 *.prof
 *.tix
 *\#
