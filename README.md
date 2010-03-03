@@ -57,10 +57,16 @@ review your changes and may ask you to make changes to them.  Make the
 changes to your local repository and use `git rebase` to massage them
 into nice, logical commits and resend the patches.
 
-Running the tests
------------------
+Building and running the tests
+------------------------------
 
-You can run all unit tests by running:
+The configure script and several of the include files are generated
+using autotools.  The first time you build the library you have to
+run:
+
+    autoreconf
+
+You can build and run all unit tests by running:
 
     cabal configure && cabal build && make -C tests run-tests
 
