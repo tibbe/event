@@ -33,13 +33,13 @@
 -- ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 -- OF THE POSSIBILITY OF SUCH DAMAGE.
 
--- A /priority search queue/ (henceforth /queue/) efficiently supports
--- the operations of both a search tree and a priority queue.  An
--- 'Elem'ent is a product of a key, a priority, and a value. Elements
--- can be inserted, deleted, modified and queried in logarithmic time,
--- and the element with the least priority can be retrieved in
--- constant time.  A queue can be built from a list of elements,
--- sorted by keys, in linear time.
+-- | A /priority search queue/ (henceforth /queue/) efficiently
+-- supports the operations of both a search tree and a priority queue.
+-- An 'Elem'ent is a product of a key, a priority, and a
+-- value. Elements can be inserted, deleted, modified and queried in
+-- logarithmic time, and the element with the least priority can be
+-- retrieved in constant time.  A queue can be built from a list of
+-- elements, sorted by keys, in linear time.
 --
 -- This implementation is due to Ralf Hinze with some modifications by
 -- Scott Dillard and Johan Tibell.
@@ -48,7 +48,6 @@
 -- Queues/, ICFP 2001, pp. 110-121
 --
 -- <http://citeseer.ist.psu.edu/hinze01simple.html>
-
 module System.Event.PSQ
     (
     -- * Binding Type
