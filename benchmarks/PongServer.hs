@@ -79,7 +79,7 @@ data Config = Config {
 
 defaultConfig :: Config
 defaultConfig = Config {
-      cfgListenBacklog = ljust maxListenQueue
+      cfgListenBacklog = ljust 1024
     , cfgMaxFds        = ljust 256
     , cfgPort          = ljust "5002"
     }

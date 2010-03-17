@@ -36,7 +36,7 @@ main = do
   sock <- socket (addrFamily ai) (addrSocketType ai) (addrProtocol ai)
   setSocketOption sock ReuseAddr 1
   bindSocket sock (addrAddress ai)
-  listen sock maxListenQueue
+  listen sock 1024
   runInUnboundThread $ acceptConnections sock
 
 acceptConnections :: Socket -> IO ()
