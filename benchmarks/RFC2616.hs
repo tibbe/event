@@ -18,7 +18,7 @@ module RFC2616
 import Control.Applicative hiding (many)
 import Data.Attoparsec as P
 import qualified Data.Attoparsec.Char8 as P8
-import Data.Attoparsec.Char8 (char8, endOfLine, isDigit)
+import Data.Attoparsec.Char8 (char8, endOfLine, isDigit_w8)
 import Data.Word (Word8)
 import qualified Data.ByteString.Char8 as B hiding (map)
 import qualified Data.ByteString as B (map)
@@ -36,7 +36,7 @@ data Request = Request {
     } deriving (Eq, Ord, Show)
 
 httpVersion :: Parser B.ByteString
-httpVersion = string "HTTP/" *> P.takeWhile (inClass "0-9.")
+httpVersion = string "HTTP/" *> P.takeWhile (\c -> isDigit_w8 c || c == 46)
 
 requestLine :: Parser Request
 requestLine = do
@@ -69,7 +69,7 @@ data Response = Response {
 responseLine :: Parser Response
 responseLine = do
   version <- httpVersion <* char8 ' '
-  code <- P8.takeWhile isDigit <* char8 ' '
+  code <- P.takeWhile isDigit_w8 <* char8 ' '
   msg <- P.takeTill P8.isEndOfLine <* endOfLine
   return $! Response version code msg
 
