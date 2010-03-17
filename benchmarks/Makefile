@@ -1,7 +1,8 @@
 include ../tests/common.mk
 
 ghc-bench-flags := -package network -package network-bytestring \
-	-package attoparsec -package bytestring-show -package mtl
+	-package parsec-3.1.0 -package attoparsec -package bytestring-show \
+	-package mtl
 
 ifdef USE_GHC_IO_MANAGER
 	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
@@ -10,7 +11,8 @@ endif
 ghc-opt-flags = -O2
 cc = gcc
 cc-opt-flags = -O2
-programs := dead-conn deadconn pong-server signal simple static-http thread-delay timers
+programs := dead-conn deadconn pong-server signal simple static-http \
+	thread-delay timers http-client
 
 .PHONY: all
 all: $(programs)
@@ -36,6 +38,11 @@ event-http: $(lib) EventUtil.o EventFile.o EventSocket.o NoPush.o RFC2616.o Even
 
 static-http: ghc-flags += $(ghc-bench-flags)
 static-http: $(lib) EventUtil.o EventFile.o EventSocket.o NoPush.o RFC2616.o StaticHttp.o
+	ranlib $(lib)
+	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
+
+http-client: ghc-flags += $(ghc-bench-flags)
+http-client: $(lib) Args.o EventUtil.o EventSocket.o RFC2616.o HttpClient.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
