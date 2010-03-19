@@ -47,6 +47,7 @@ import Control.Exception (finally)
 import Control.Monad (forM_, liftM, when)
 import Data.IORef (IORef, atomicModifyIORef, mkWeakIORef, newIORef, readIORef,
                    writeIORef)
+import Data.List (foldl')
 import Data.Monoid (mconcat, mempty)
 import Prelude hiding (init)
 import System.Event.Clock (getCurrentTime)
@@ -99,11 +100,46 @@ data State = Created
            | Finished
              deriving (Eq, Show)
 
+-- | A priority search queue, with timeouts as priorities.
+type TimeoutQueue = Q.PSQ TimeoutCallback
+
+{-
+Instead of directly modifying the 'TimeoutQueue' in
+e.g. 'registerTimeout' we keep a list of edits to perform and have the
+I/O manager thread perform the edits later.  This exist to address the
+following GC problem:
+
+Since e.g. 'registerTimeout' doesn't force the evaluation of the
+thunks inside the 'emTimeouts' IORef a number of thunks build up
+inside the IORef.  If the I/O manager thread doesn't evaluate these
+thunks soon enough they'll get promoted to the old generation and
+become roots for all subsequent minor GCs.
+
+When the thunks eventually get evaluated they will each create a new
+intermediate 'TimeoutQueue' that immediately becomes garbage.  Since
+the thunks serve as roots until the next major GC these intermediate
+'TimeoutQueue's will get copied unnecesarily in the next minor GC,
+increasing GC time.  This problem is known as "floating garbage".
+
+Keeping a list of edits doesn't stop this from happening but makes the
+amount of data that gets copied smaller.
+
+TODO: Evaluate the content of the IORef to WHNF on each insert once
+this bug is resolved: http://hackage.haskell.org/trac/ghc/ticket/3838
+-}
+
+-- | An edit to apply to a 'TimeoutQueue'.
+type TimeoutEdit = TimeoutQueue -> TimeoutQueue
+
+-- | Apply a list of edits to a 'TimeoutQueue'.
+applyTimeoutEdits :: TimeoutQueue -> [TimeoutEdit] -> TimeoutQueue
+applyTimeoutEdits = foldl' (flip ($))
+
 -- | The event manager state.
 data EventManager = EventManager
     { emBackend      :: {-# UNPACK #-} !Backend
     , emFds          :: {-# UNPACK #-} !(MVar (IM.IntMap [FdData]))
-    , emTimeouts     :: {-# UNPACK #-} !(IORef (Q.PSQ TimeoutCallback))
+    , emTimeouts     :: {-# UNPACK #-} !(IORef [TimeoutEdit])
     , emState        :: {-# UNPACK #-} !(IORef State)
     , emUniqueSource :: {-# UNPACK #-} !UniqueSource
     , emControl      :: {-# UNPACK #-} !Control
@@ -138,7 +174,7 @@ new = newWith =<< newDefaultBackend
 newWith :: Backend -> IO EventManager
 newWith be = do
   iofds <- newMVar IM.empty
-  timeouts <- newIORef Q.empty
+  timeouts <- newIORef []
   ctrl <- newControl
   state <- newIORef Created
   us <- newSource
@@ -187,9 +223,10 @@ cleanup mgr@EventManager{..} = do
 loop :: EventManager -> IO ()
 loop mgr@EventManager{..} = do
   init mgr
-  go `finally` cleanup mgr
+  go Q.empty `finally` cleanup mgr
  where
-  go = step mgr >>= (`when` go)
+  go q = do (running, q') <- step mgr q
+            when running $ go q'
 
 init :: EventManager -> IO ()
 init mgr@EventManager{..} = do
@@ -199,27 +236,29 @@ init mgr@EventManager{..} = do
   when (state /= Created) .
     error $ "System.Event.Manager.init: state is already " ++ show state
 
-step :: EventManager -> IO Bool
-step mgr@EventManager{..} = do
-  timeout <- mkTimeout
+step :: EventManager -> TimeoutQueue -> IO (Bool, TimeoutQueue)
+step mgr@EventManager{..} q = do
+  (timeout, q') <- mkTimeout q
   I.poll emBackend timeout (onFdEvent mgr)
   state <- readIORef emState
-  return $! state == Running
+  state `seq` return (state == Running, q')
  where
+
   -- | Call all expired timer callbacks and return the time to the
   -- next timeout.
-  mkTimeout :: IO Timeout
-  mkTimeout = do
+  mkTimeout :: TimeoutQueue -> IO (Timeout, TimeoutQueue)
+  mkTimeout q = do
       now <- getCurrentTime
-      (expired, q') <- atomicModifyIORef emTimeouts $ \q ->
-          let res@(_, q') = Q.atMost now q in (q', res)
+      newTimeouts <- atomicModifyIORef emTimeouts $ \q -> ([], q)
+      let (expired, q') = Q.atMost now (applyTimeoutEdits q newTimeouts)
       sequence_ $ map Q.value expired
-      case Q.minView q' of
-        Nothing             -> return Forever
-        Just (Q.E _ t _, _) ->
-            -- This value will always be positive since the call
-            -- to 'atMost' above removed any timeouts <= 'now'
-            return $! Timeout (t - now)
+      let timeout = case Q.minView q' of
+            Nothing             -> Forever
+            Just (Q.E _ t _, _) ->
+                -- This value will always be positive since the call
+                -- to 'atMost' above removed any timeouts <= 'now'
+                Timeout $! t - now
+      return (timeout, q')
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
@@ -319,15 +358,17 @@ registerTimeout mgr ms cb = do
       -- evaluation until mkTimeout in the event loop.  This is a
       -- workaround for a nasty IORef contention problem that causes the
       -- thread-delay benchmark to take 20 seconds instead of 0.2.
-      _ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
-           let q' = Q.insert key expTime cb q in (q', q')
+      _ <- atomicModifyIORef (emTimeouts mgr) $ \edits ->
+           let edits' = (Q.insert key expTime cb) : edits
+           in (edits', edits')
       wakeManager mgr
   return $! TK key
 
 unregisterTimeout :: EventManager -> TimeoutKey -> IO ()
 unregisterTimeout mgr (TK key) = do
-  !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
-        let q' = Q.delete key q in (q', q')
+  !_ <- atomicModifyIORef (emTimeouts mgr) $ \edits ->
+       let edits' = (Q.delete key) : edits
+       in (edits', edits')
   wakeManager mgr
 
 updateTimeout :: EventManager -> TimeoutKey -> Int -> IO ()
@@ -335,8 +376,9 @@ updateTimeout mgr (TK key) ms = do
   now <- getCurrentTime
   let expTime = fromIntegral ms / 1000.0 + now
 
-  !_ <- atomicModifyIORef (emTimeouts mgr) $ \q ->
-        let q' = Q.adjust (const expTime) key q in (q', q')
+  !_ <- atomicModifyIORef (emTimeouts mgr) $ \edits ->
+       let edits' = (Q.adjust (const expTime) key) : edits
+       in (edits', edits')
   wakeManager mgr
 
 ------------------------------------------------------------------------
