@@ -11,13 +11,15 @@ import Foreign.C.Error
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Utils
+import Foreign.ForeignPtr
 import Foreign.Ptr
 import System.Posix.Types
 import Network.Socket hiding (accept, recv)
 import Network.Socket.Internal
-import EventSocket (recv, sendAll)
+import EventSocket (recv, sendAll, c_recv)
 import EventUtil (setNonBlocking)
-import Data.ByteString.Char8 as B
+import Data.ByteString.Char8 as B hiding (zip)
+import Data.ByteString.Internal as B
 
 main = do
   ensureIOManagerIsRunning
@@ -31,9 +33,11 @@ main = do
   listen sock maxListenQueue
   mgrs <- replicateM numCapabilities E.new
   done <- newEmptyMVar
-  forM_ mgrs $ \mgr -> do
-    forkIO $ E.loop mgr >> putMVar done ()
-    accept mgr sock client
+  forM_ (zip [0..] mgrs) $ \(cpu,mgr) -> do
+    forkOnIO cpu $ do
+      accept mgr sock clinet
+      loop mgr
+      putMVar done ()
   takeMVar done
 
 repeatOnIntr :: IO (Either Errno a) -> IO (Either Errno a)
@@ -58,7 +62,7 @@ blocking mgr efdk act on_success = do
             ioError (errnoToIOError "accept" err Nothing Nothing)
         | otherwise ->
             case efdk of
-              Left (fd,evts) -> registerFd mgr retry fd evts >> return ()
+              Left (fd,evts) -> registerFd_ mgr retry fd evts >> return ()
               Right _        -> return ()
     Right a -> case efdk of
                  Left (fd,_evts) -> on_success (Left fd) a
@@ -84,6 +88,29 @@ accept mgr sock@(MkSocket fd family stype proto _status) serve = do
     nsock <- MkSocket nfd family stype proto `fmap` newMVar Connected
     serve mgr nsock addr
             
+clinet :: EventManager -> Socket -> SockAddr -> IO ()
+clinet mgr sock addr = do
+  let MkSocket fd _ _ _ _ = sock
+      act = do
+        let bufSize = 4096
+        fp <- B.mallocByteString bufSize
+        withForeignPtr fp $ \ptr -> do
+          ret <- c_recv fd ptr (fromIntegral bufSize) 0
+          if ret == -1
+            then Left `fmap` getErrno
+            else if ret == 0
+            then return $! Right empty
+            else do         
+              let !bs = PS (castForeignPtr fp) 0 (fromIntegral ret)
+              return $! Right bs
+  blocking mgr (Left (fromIntegral fd,evtRead)) act $ \efdk bs -> do
+    fd <- case efdk of
+            Left fd -> return fd
+            Right fdk -> unregisterFd_ mgr fdk >> return (keyFd fdk)
+    let msg = "HTTP/1.0 200 OK\r\nConnection: Close\r\nContent-Length: 5\r\n\r\nPong!"
+    sendAll sock msg
+    sClose sock
+
 client :: EventManager -> Socket -> SockAddr -> IO ()
 client _mgr sock _addr = (`finally` sClose sock) $ do
   recvRequest ""

@@ -8,6 +8,7 @@ module EventSocket
     , recv
     , send
     , sendAll
+    , c_recv
     ) where
 
 import Control.Concurrent (modifyMVar_, newMVar)
@@ -72,7 +73,7 @@ connect sock@(MkSocket s _family _stype _protocol socketStatus) addr = do
                       Nothing Nothing)
 
 foreign import ccall unsafe "connect"
-  c_connect :: CInt -> Ptr SockAddr -> CInt{-CSockLen???-} -> IO CInt
+  c_connect :: CInt -> Ptr SockAddr -> CInt{-CSockLen?? -} -> IO CInt
 
 ------------------------------------------------------------------------
 -- Receiving
@@ -145,7 +146,7 @@ mkInvalidRecvArgError loc = ioeSetErrorString (mkIOError
                             "non-positive length"
 
 foreign import ccall unsafe "sys/socket.h accept"
-    c_accept :: CInt -> Ptr SockAddr -> Ptr CInt{-CSockLen???-} -> IO CInt
+    c_accept :: CInt -> Ptr SockAddr -> Ptr CInt{-CSockLen?? -} -> IO CInt
 
 foreign import ccall unsafe "sys/socket.h send"
     c_send :: CInt -> Ptr a -> CSize -> CInt -> IO CInt
