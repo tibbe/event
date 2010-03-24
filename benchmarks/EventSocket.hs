@@ -9,6 +9,7 @@ module EventSocket
     , send
     , sendAll
     , c_recv
+    , c_send
     ) where
 
 import Control.Concurrent (modifyMVar_, newMVar)

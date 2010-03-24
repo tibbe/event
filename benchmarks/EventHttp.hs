@@ -16,7 +16,7 @@ import Foreign.Ptr
 import System.Posix.Types
 import Network.Socket hiding (accept, recv)
 import Network.Socket.Internal
-import EventSocket (recv, sendAll, c_recv)
+import EventSocket (recv, sendAll, c_recv, c_send)
 import EventUtil (setNonBlocking)
 import Data.ByteString.Char8 as B hiding (zip)
 import Data.ByteString.Internal as B
@@ -107,8 +107,9 @@ clinet mgr sock addr = do
     fd <- case efdk of
             Left fd -> return fd
             Right fdk -> unregisterFd_ mgr fdk >> return (keyFd fdk)
-    let msg = "HTTP/1.0 200 OK\r\nConnection: Close\r\nContent-Length: 5\r\n\r\nPong!"
-    sendAll sock msg
+    let (PS fp off len) = "HTTP/1.0 200 OK\r\nConnection: Close\r\nContent-Length: 5\r\n\r\nPong!"
+    withForeignPtr fp $ \s ->
+      c_send (fromIntegral fd) (s `plusPtr` off) (fromIntegral len) 0
     sClose sock
 
 client :: EventManager -> Socket -> SockAddr -> IO ()
