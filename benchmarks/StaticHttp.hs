@@ -69,7 +69,7 @@ client sock = (`finally` sClose sock) loop
         let http10 = requestVersion req == "1.0"
             connection = lookupHeader "Connection" hdrs
             keepAlive = (http10 && connection == ["Keep-Alive"]) ||
-                        connection /= ["Close"]
+                        (not http10 && connection /= ["Close"])
         bracket (openFd (B.unpack (requestUri req)) ReadOnly Nothing
                         defaultFileFlags{nonBlock=True}) closeFd $ \fd -> do
           st <- getFdStatus fd
