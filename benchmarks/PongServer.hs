@@ -29,8 +29,9 @@ import System.Posix.Resource (ResourceLimit(..), ResourceLimits(..),
 
 main = do
   (cfg, _) <- parseArgs defaultConfig defaultOptions =<< getArgs
-  let port = theLast cfgPort cfg
-      lim  = ResourceLimit . fromIntegral . theLast cfgMaxConns $ cfg
+  let listenBacklog = theLast cfgListenBacklog cfg
+      port = theLast cfgPort cfg
+      lim  = ResourceLimit . fromIntegral . theLast cfgMaxFds $ cfg
       myHints = defaultHints { addrFlags = [AI_PASSIVE]
                              , addrSocketType = Stream }
 #ifndef USE_GHC_IO_MANAGER
@@ -42,7 +43,7 @@ main = do
   sock <- socket (addrFamily ai) (addrSocketType ai) (addrProtocol ai)
   setSocketOption sock ReuseAddr 1
   bindSocket sock (addrAddress ai)
-  listen sock maxListenQueue
+  listen sock listenBacklog
   runInUnboundThread $ acceptConnections sock
 
 acceptConnections :: Socket -> IO ()
@@ -71,23 +72,30 @@ client sock = do
 -- Configuration
 
 data Config = Config {
-      cfgPort     :: Last String
-    , cfgMaxConns :: Last Int
+      cfgListenBacklog :: Last Int
+    , cfgMaxFds        :: Last Int
+    , cfgPort          :: Last String
     }
 
 defaultConfig :: Config
-defaultConfig = Config { cfgPort     = ljust "5002"
-                       , cfgMaxConns = ljust 256
-                       }
+defaultConfig = Config {
+      cfgListenBacklog = ljust maxListenQueue
+    , cfgMaxFds        = ljust 256
+    , cfgPort          = ljust "5002"
+    }
 
 instance Monoid Config where
-    mempty = Config { cfgPort     = mempty
-                    , cfgMaxConns = mempty
-                    }
+    mempty = Config {
+          cfgListenBacklog = mempty
+        , cfgMaxFds        = mempty
+        , cfgPort          = mempty
+        }
 
-    mappend a b = Config { cfgPort     = app cfgPort a b
-                         , cfgMaxConns = app cfgMaxConns a b
-                         }
+    mappend a b = Config {
+          cfgListenBacklog = app cfgListenBacklog a b
+        , cfgMaxFds        = app cfgMaxFds a b
+        , cfgPort          = app cfgPort a b
+        }
       where app :: (Monoid b) => (a -> b) -> a -> a -> b
             app = on mappend
 
@@ -96,8 +104,12 @@ defaultOptions = [
       Option ['p'] ["port"]
           (ReqArg (\s -> return mempty { cfgPort = ljust s }) "N")
           "server port"
-    , Option ['m'] ["max-connections"]
-          (ReqArg (positive "maximum number of connections" $ \n ->
-               mempty { cfgMaxConns = n }) "N")
-          "maximum number of concurrent connections"
+    , Option ['m'] ["max-fds"]
+          (ReqArg (positive "maximum number of file descriptors" $ \n ->
+               mempty { cfgMaxFds = n }) "N")
+          "maximum number of file descriptors"
+    , Option [] ["listen-backlog"]
+          (ReqArg (positive "maximum number of pending connections" $ \n ->
+               mempty { cfgListenBacklog = n }) "N")
+          "maximum number of pending connections"
     ]

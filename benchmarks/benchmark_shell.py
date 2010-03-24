@@ -12,12 +12,14 @@ import os, sys, tempfile
 
 sysctls = dict(
     Darwin={
+        'kern.ipc.somaxconn': 1024,
         'kern.maxfiles': 22528,
         'kern.maxfilesperproc': 20480,
         'net.inet.ip.portrange.first': 1024,
         'net.inet.ip.portrange.hifirst': 1024,
         },
     Linux={
+        'net.core.somaxconn': 1024,
         'net.core.rmem_max': 16777216,
         'net.core.wmem_max': 16777216,
         'net.ipv4.ip_local_port_range': '1024 65535',
@@ -46,7 +48,7 @@ elif os.access('/usr/sbin/sysctl', os.X_OK):
 else:
     print >> sys.stderr, 'where is sysctl!?'
     sys.exit(1)
-    
+
 changed_sysctls = {}
 
 def change_sysctl(name, newval):

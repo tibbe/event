@@ -74,17 +74,17 @@ data Backend = forall a. Backend {
 
     -- | Poll backend for new events.  The provided callback is called
     -- once per file descriptor with new events.
-    , _bePoll :: a                          -- ^ backend state
-              -> Timeout                    -- ^ timeout in milliseconds
-              -> (Fd -> Event -> IO ())     -- ^ I/O callback
+    , _bePoll :: a                          -- backend state
+              -> Timeout                    -- timeout in milliseconds
+              -> (Fd -> Event -> IO ())     -- I/O callback
               -> IO ()
 
     -- | Register, modify, or unregister interest in the given events
     -- on the given file descriptor.
     , _beModifyFd :: a
-                  -> Fd       -- ^ file descriptor
-                  -> Event    -- ^ old events to watch for ('mempty' for new)
-                  -> Event    -- ^ new events to watch for ('mempty' to delete)
+                  -> Fd       -- file descriptor
+                  -> Event    -- old events to watch for ('mempty' for new)
+                  -> Event    -- new events to watch for ('mempty' to delete)
                   -> IO ()
 
     , _beDelete :: a -> IO ()

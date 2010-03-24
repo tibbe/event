@@ -1,7 +1,3 @@
-ghc-opt-flags = -O2
-cc = gcc
-cc-opt-flags = -O2
-
 include ../tests/common.mk
 
 ghc-bench-flags := -package network -package network-bytestring \
@@ -11,10 +7,9 @@ ifdef USE_GHC_IO_MANAGER
 	ghc-bench-flags += -DUSE_GHC_IO_MANAGER
 endif
 
-ifdef USE_EVENTLOG
-	ghc-bench-flags += -eventlog
-endif
-
+ghc-opt-flags = -O2
+cc = gcc
+cc-opt-flags = -O2
 programs := dead-conn deadconn pong-server signal simple static-http thread-delay timers
 
 .PHONY: all
@@ -62,7 +57,7 @@ timers: $(lib) Args.o Timers.o
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
 %.o: %.hs
-	$(ghc) $(ghc-flags) $(ghc-opt-flags) -c -o $@ $<
+	$(ghc) $(ghc-flags) $(ghc-opt-flags) $(ghc-prof-flags) -c -o $@ $<
 
 %.o: %.c
 	$(cc) $(cc-opt-flags) -c -o $@ $<
