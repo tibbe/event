@@ -30,7 +30,7 @@ main = do
   sock <- socket (addrFamily ai) (addrSocketType ai) (addrProtocol ai)
   setSocketOption sock ReuseAddr 1
   bindSocket sock (addrAddress ai)
-  listen sock maxListenQueue
+  listen sock 1024
   mgrs <- replicateM numCapabilities E.new
   done <- newEmptyMVar
   forM_ (zip [0..] mgrs) $ \(cpu,mgr) -> do
@@ -112,16 +112,20 @@ clinet mgr sock addr = do
     sClose sock
 
 client :: EventManager -> Socket -> SockAddr -> IO ()
-client _mgr sock _addr = (`finally` sClose sock) $ do
-  recvRequest ""
-  sendAll sock msg
+client _mgr sock _addr = loop `finally` sClose sock
  where
+  loop = do
+    req <- recvRequest ""
+    sendAll sock msg
+    if "Connection: Keep-Alive" `isInfixOf` req
+      then loop
+      else return ()
   msg = "HTTP/1.0 200 OK\r\nConnection: Close\r\nContent-Length: 5\r\n\r\nPong!"
   recvRequest r = do
     s <- recv sock 4096
     let t = B.append r s
     if B.null s || "\r\n\r\n" `B.isInfixOf` t
-      then return ()
+      then return t
       else recvRequest t
 
 foreign import ccall unsafe "sys/socket.h accept"
