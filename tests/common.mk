@@ -22,7 +22,8 @@ ghc-base-flags := -funbox-strict-fields \
 	-package bytestring -ignore-package $(package) \
 	-fno-ignore-asserts
 ghc-base-flags += -Wall -fno-warn-orphans -fno-warn-missing-signatures
-ghc-flags := $(ghc-base-flags) -i../dist/build -package-name $(package)-$(version)
+ghc-flags := $(ghc-base-flags) -i../dist/build \
+	-package-name $(package)-$(version) $(ghc-prof-flags)
 ghc-hpc-flags := $(ghc-base-flags) -fhpc -fno-ignore-asserts -odir hpcdir \
 	-hidir hpcdir -i..
 lib := ../dist/build/libHS$(package)-$(version)$(lib-suffix).a
