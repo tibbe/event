@@ -31,3 +31,9 @@ lib-srcs := $(shell grep '^    *System' ../$(package).cabal | \
                     sed -e 's,\.,/,g' -e 's,$$,.hs,')
 
 cabal := $(shell which cabal 2>/dev/null)
+
+%.o: %.hs
+	$(ghc) $(ghc-flags) $(ghc-opt-flags) -c -o $@ $<
+
+%.hs: %.hsc
+	hsc2hs $<

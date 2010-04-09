@@ -13,9 +13,6 @@ tests: $(lib) Array.o Manager.o PSQ.o RunTests.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
-%.o: %.hs
-	$(ghc) $(ghc-flags) $(ghc-opt-flags) -c -o $@ $<
-
 .PHONY: clean
 clean:
 	-find . \( -name '*.o' -o -name '*.hi' \) -exec rm {} \;

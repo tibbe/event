@@ -47,7 +47,7 @@ simple: $(lib) Args.o Simple.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
-thread-delay: ghc-flags += $(ghc-bench-flags) -package stm
+thread-delay: ghc-flags += -package stm
 thread-delay: $(lib) Args.o ThreadDelay.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
@@ -56,14 +56,8 @@ timers: $(lib) Args.o Timers.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
-%.o: %.hs
-	$(ghc) $(ghc-flags) $(ghc-opt-flags) -c -o $@ $<
-
 %.o: %.c
 	$(cc) $(cc-opt-flags) -c -o $@ $<
-
-%.hs: %.hsc
-	hsc2hs $<
 
 .PHONY: clean
 clean:
