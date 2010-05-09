@@ -2,7 +2,7 @@
 
 import Control.Concurrent (forkIO, runInUnboundThread)
 import Control.Exception (bracket, finally)
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Control.Monad.Fix (fix)
 import qualified Data.Attoparsec as A
 import qualified Data.ByteString.Char8 as B
@@ -36,7 +36,7 @@ main = do
   sock <- socket (addrFamily ai) (addrSocketType ai) (addrProtocol ai)
   setSocketOption sock ReuseAddr 1
   bindSocket sock (addrAddress ai)
-  listen sock maxListenQueue
+  listen sock 1024
   runInUnboundThread $ acceptConnections sock
 
 acceptConnections :: Socket -> IO ()
@@ -65,14 +65,26 @@ client sock = (`finally` sClose sock) loop
   loop = do
     (bs, ereq) <- parseM (recv sock 4096) request
     case ereq of
-      Right (req,hdrs) | requestMethod req == "GET" ->
+      Right (req,hdrs) | requestMethod req == "GET" -> do
+        let http10 = requestVersion req == "1.0"
+            connection = lookupHeader "Connection" hdrs
+            keepAlive = (http10 && connection == ["Keep-Alive"]) ||
+                        (not http10 && connection /= ["Close"])
         bracket (openFd (B.unpack (requestUri req)) ReadOnly Nothing
                         defaultFileFlags{nonBlock=True}) closeFd $ \fd -> do
           st <- getFdStatus fd
-          let fixedHeaders = B.intercalate "\r\n" [
-                  "HTTP/1.1 200 OK"
-                , "Content-type: application/octet-stream"
-                ]
+          let fixedHeaders
+                  | http10 && keepAlive =
+                      B.intercalate "\r\n" [
+                            "HTTP/1.0 200 OK"
+                           , "Content-type: application/octet-stream"
+                           , "Connection: Keep-Alive"
+                           ]
+                  | otherwise =
+                      B.intercalate "\r\n" [
+                            "HTTP/1.1 200 OK"
+                           , "Content-type: application/octet-stream"
+                           ]
           withNoPush sock $ do
             sendAll sock $! (`B.append` "\r\n\r\n") $ B.intercalate "\r\n" [
                 fixedHeaders
@@ -81,6 +93,6 @@ client sock = (`finally` sClose sock) loop
             fix $ \sendLoop -> do
               s <- F.read fd 16384
               unless (B.null s) $ sendAll sock s >> sendLoop
-          unless (requestProtocol req == "1.0") loop
-      _ | B.null bs -> return ()
-        | otherwise -> sendAll sock "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"
+        when keepAlive loop
+      err | B.null bs -> return ()
+          | otherwise -> print err >> sendAll sock "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"

@@ -8,18 +8,21 @@ module EventSocket
     , recv
     , send
     , sendAll
+    , c_recv
+    , c_send
     ) where
 
 import Control.Concurrent (modifyMVar_, newMVar)
 import Control.Monad (liftM, when)
 import Data.ByteString (ByteString)
-import Data.ByteString.Internal (createAndTrim)
 import Data.Word (Word8)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Internal as B
 import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 import Foreign.C.Types (CChar, CInt, CSize)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Marshal.Utils (with)
+import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr (Ptr, castPtr)
 import Foreign.C.Error (Errno(..), eINPROGRESS, eINTR,
                         errnoToIOError, getErrno, throwErrno)
@@ -72,7 +75,7 @@ connect sock@(MkSocket s _family _stype _protocol socketStatus) addr = do
                       Nothing Nothing)
 
 foreign import ccall unsafe "connect"
-  c_connect :: CInt -> Ptr SockAddr -> CInt{-CSockLen???-} -> IO CInt
+  c_connect :: CInt -> Ptr SockAddr -> CInt{-CSockLen?? -} -> IO CInt
 
 ------------------------------------------------------------------------
 -- Receiving
@@ -80,7 +83,12 @@ foreign import ccall unsafe "connect"
 recv :: Socket -> Int -> IO ByteString
 recv (MkSocket s _ _ _ _) nbytes
     | nbytes <= 0 = ioError (mkInvalidRecvArgError "Network.Socket.ByteString.recv")
-    | otherwise   = createAndTrim nbytes $ recvInner s nbytes
+    | otherwise   = do
+  fp <- B.mallocByteString nbytes
+  n <- withForeignPtr fp $ recvInner s nbytes
+  if n <= 0
+    then return B.empty
+    else return $! B.PS fp 0 n
 
 recvInner :: CInt -> Int -> Ptr Word8 -> IO Int
 recvInner s nbytes ptr = do
@@ -145,7 +153,7 @@ mkInvalidRecvArgError loc = ioeSetErrorString (mkIOError
                             "non-positive length"
 
 foreign import ccall unsafe "sys/socket.h accept"
-    c_accept :: CInt -> Ptr SockAddr -> Ptr CInt{-CSockLen???-} -> IO CInt
+    c_accept :: CInt -> Ptr SockAddr -> Ptr CInt{-CSockLen?? -} -> IO CInt
 
 foreign import ccall unsafe "sys/socket.h send"
     c_send :: CInt -> Ptr a -> CSize -> CInt -> IO CInt

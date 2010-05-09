@@ -24,6 +24,7 @@ benchmarks/Simple
 benchmarks/dead-conn
 benchmarks/deadconn
 benchmarks/event-http
+benchmarks/http-client
 benchmarks/pong-server
 benchmarks/simple
 benchmarks/static-http
