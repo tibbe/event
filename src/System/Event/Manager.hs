@@ -199,7 +199,7 @@ newWith be = do
 shutdown :: EventManager -> IO ()
 shutdown mgr = do
   state <- readIORef (emState mgr)
-  when (state /= Finished) $ do
+  when (state == Running) $ do
     sendDie (emControl mgr)
     takeMVar (emFinished mgr)
 
