@@ -9,7 +9,7 @@ run-tests: tests
 	./tests
 
 tests: ghc-flags += $(ghc-test-flags)
-tests: $(lib) Array.o Manager.o PSQ.o RunTests.o
+tests: $(lib) Array.o Manager.o PSQ.o Regression.o RunTests.o
 	ranlib $(lib)
 	$(ghc) $(ghc-flags) -threaded -o $@ $(filter %.o,$^) $(lib)
 
