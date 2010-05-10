@@ -305,10 +305,10 @@ eventsOf :: [FdData] -> Event
 eventsOf = mconcat . map fdEvents
 
 pairEvents :: [FdData] -> IM.IntMap [FdData] -> Int -> (Event, Event)
-pairEvents prev m fd = let !l = eventsOf prev
-                           !r = case IM.lookup fd m of
-                                  Nothing  -> mempty
-                                  Just fds -> eventsOf fds
+pairEvents prev m fd = let l = eventsOf prev
+                           r = case IM.lookup fd m of
+                                 Nothing  -> mempty
+                                 Just fds -> eventsOf fds
                        in (l, r)
 
 -- | Drop a previous file descriptor registration, without waking the
