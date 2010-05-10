@@ -1,4 +1,5 @@
-{-# LANGUAGE BangPatterns, CPP, ExistentialQuantification, RecordWildCards #-}
+{-# LANGUAGE BangPatterns, CPP, ExistentialQuantification, RecordWildCards,
+    TypeSynonymInstances #-}
 module System.Event.Manager
     ( -- * Types
       EventManager
@@ -78,7 +79,7 @@ data FdData = FdData {
       fdKey       :: {-# UNPACK #-} !FdKey
     , fdEvents    :: {-# UNPACK #-} !Event
     , _fdCallback :: {-# UNPACK #-} !IOCallback
-    }
+    } deriving (Show)
 
 -- | A file descriptor registration cookie.
 data FdKey = FdKey {
@@ -88,6 +89,9 @@ data FdKey = FdKey {
 
 -- | Callback invoked on I/O events.
 type IOCallback = FdKey -> Event -> IO ()
+
+instance Show IOCallback where
+    show _ = "IOCallback"
 
 newtype TimeoutKey   = TK Unique
     deriving (Eq)
@@ -274,13 +278,13 @@ registerFd_ EventManager{..} cb fd evs = do
     let fd'  = fromIntegral fd
         reg  = FdKey fd u
         !fdd = FdData reg evs cb
-        (!newKey, (oldEvs, newEvs)) =
+        (!newMap, (oldEvs, newEvs)) =
             case IM.insertWith (++) fd' [fdd] oldMap of
               (Nothing,   n) -> (n, (mempty, evs))
-              (Just prev, n) -> (n, pairEvents prev newKey fd')
+              (Just prev, n) -> (n, pairEvents prev newMap fd')
         modify = oldEvs /= newEvs
     when modify $ I.modifyFd emBackend fd oldEvs newEvs
-    return (newKey, (reg, modify))
+    return (newMap, (reg, modify))
 {-# INLINE registerFd_ #-}
 
 -- | @registerFd mgr cb fd evs@ registers interest in the events @evs@

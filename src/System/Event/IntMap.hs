@@ -222,6 +222,15 @@ foldWithKey :: (Key -> a -> b -> b) -> b -> IntMap a -> b
 foldWithKey f z t
   = foldr f z t
 
+-- | /O(n)/. Convert the map to a list of key\/value pairs.
+--
+-- > toList (fromList [(5,"a"), (3,"b")]) == [(3,"b"), (5,"a")]
+-- > toList empty == []
+
+toList :: IntMap a -> [(Key,a)]
+toList t
+  = foldWithKey (\k x xs -> (k,x):xs) [] t
+
 foldr :: (Key -> a -> b -> b) -> b -> IntMap a -> b
 foldr f z t
   = case t of
@@ -268,6 +277,10 @@ nequal (Tip kx x) (Tip ky y)
     = (kx /= ky) || (x/=y)
 nequal Nil Nil = False
 nequal _   _   = True
+
+instance Show a => Show (IntMap a) where
+  showsPrec d m   = showParen (d > 10) $
+    showString "fromList " . shows (toList m)
 
 ------------------------------------------------------------------------
 -- Utility functions
