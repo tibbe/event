@@ -15,6 +15,7 @@ import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import GHC.Conc (TVar, ThreadId, ThreadStatus(..), atomically, forkIO,
                  labelThread, newTVar, threadStatus, writeTVar)
 import qualified GHC.Conc as Conc
+import Prelude
 import System.Event.Manager (Event, EventManager, evtRead, evtWrite, loop,
                              new, registerFd, unregisterFd_, registerTimeout)
 import System.IO.Unsafe (unsafePerformIO)

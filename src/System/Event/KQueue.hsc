@@ -7,6 +7,7 @@ module System.Event.KQueue
     , available
     ) where
 
+import Prelude
 import System.Posix.Internals (c_close)
 import qualified System.Event.Internal as E
 

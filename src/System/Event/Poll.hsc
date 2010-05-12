@@ -25,9 +25,10 @@ import Data.Monoid (Monoid(..))
 import Foreign.C.Types (CInt, CShort, CULong)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable(..))
+import Prelude
+import System.Posix.Types (Fd(..))
 import qualified System.Event.Array as A
 import qualified System.Event.Internal as E
-import System.Posix.Types (Fd(..))
 
 available :: Bool
 available = True

@@ -26,6 +26,7 @@ import Foreign.C.Types (CInt)
 import Foreign.Marshal (alloca, allocaBytes)
 import Foreign.Marshal.Array (allocaArray)
 import Foreign.Storable (peek, peekElemOff, poke)
+import Prelude
 import System.Posix.Internals (c_close, c_pipe, c_read, c_write,
                                setCloseOnExec, setNonBlockingFD)
 import System.Posix.Types (Fd)

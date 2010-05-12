@@ -7,6 +7,7 @@ module System.Event.Clock (getCurrentTime) where
 import Foreign (Ptr, Storable(..), nullPtr, with)
 import Foreign.C.Error (throwErrnoIfMinus1_)
 import Foreign.C.Types (CInt, CLong)
+import Prelude
 
 -- TODO: Implement this for Windows.
 

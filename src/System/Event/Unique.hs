@@ -9,6 +9,7 @@ module System.Event.Unique
 
 import Data.Int (Int64)
 import GHC.Conc (TVar, atomically, newTVarIO, readTVar, writeTVar)
+import Prelude
 
 -- We used to use IORefs here, but Simon switched us to STM when we
 -- found that our use of atomicModifyIORef was subject to a severe RTS

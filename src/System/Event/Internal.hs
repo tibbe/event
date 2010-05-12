@@ -23,6 +23,7 @@ import Data.Bits ((.|.), (.&.))
 import Data.List (foldl', intercalate)
 import Data.Monoid (Monoid(..))
 import Foreign.C.Error (eINTR, getErrno, throwErrno)
+import Prelude
 import System.Posix.Types (Fd)
 
 -- | An I/O event.

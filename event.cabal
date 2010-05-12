@@ -20,6 +20,8 @@ extra-source-files:
   cbits/eventsupport.c include/EventConfig.h.in include/HsEvent.h
 
 library
+  extensions: NoImplicitPrelude
+
   exposed-modules:
     System.Event
     System.Event.Thread

@@ -33,5 +33,4 @@ module System.Event
     , unregisterTimeout
     ) where
 
-import Prelude hiding (init)
 import System.Event.Manager

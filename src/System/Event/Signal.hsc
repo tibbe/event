@@ -32,6 +32,7 @@ import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtr, withForeignPtr)
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr, nullPtr)
 import Foreign.Storable (Storable(..))
+import Prelude
 import System.Event.Unique (Unique, UniqueSource, newUnique, newSource)
 import qualified System.Event.IntMap as IM
 

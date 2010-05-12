@@ -38,6 +38,7 @@ import Foreign.C.Types (CInt)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable(..))
+import Prelude
 import System.Posix.Internals (c_close)
 #if !defined(HAVE_EPOLL_CREATE1)
 import System.Posix.Internals (setCloseOnExec)
