@@ -24,8 +24,7 @@ module System.Event.Array
     ) where
 
 import Control.Monad (when)
-import Data.IORef (IORef, atomicModifyIORef, mkWeakIORef, newIORef, readIORef,
-                   writeIORef)
+import Data.IORef (IORef, atomicModifyIORef, newIORef, readIORef, writeIORef)
 import Foreign.C.Types (CSize)
 import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
 import Foreign.Ptr (Ptr, nullPtr, plusPtr)

@@ -187,14 +187,14 @@ newWith be = do
                when (st /= Finished) $ do
                  I.delete be
                  closeControl ctrl
-  finished <- newEmptyMVar
+  fini <- newEmptyMVar
   let mgr = EventManager { emBackend = be
                          , emFds = iofds
                          , emTimeouts = timeouts
                          , emState = state
                          , emUniqueSource = us
                          , emControl = ctrl
-                         , emFinished = finished
+                         , emFinished = fini
                          }
   _ <- registerFd_ mgr (handleControlEvent mgr) (controlReadFd ctrl) evtRead
   _ <- registerFd_ mgr (handleControlEvent mgr) (wakeupReadFd ctrl) evtRead
@@ -211,7 +211,7 @@ finished :: EventManager -> IO Bool
 finished mgr = (== Finished) `liftM` readIORef (emState mgr)
 
 cleanup :: EventManager -> IO ()
-cleanup mgr@EventManager{..} = do
+cleanup EventManager{..} = do
   writeIORef emState Finished
   I.delete emBackend
   closeControl emControl
@@ -233,7 +233,7 @@ loop mgr@EventManager{..} = do
             when running $ go q'
 
 init :: EventManager -> IO ()
-init mgr@EventManager{..} = do
+init EventManager{..} = do
   state <- atomicModifyIORef emState $ \s -> case s of
                                                Created -> (Running, s)
                                                _       -> (s, s)
@@ -241,8 +241,8 @@ init mgr@EventManager{..} = do
     error $ "System.Event.Manager.init: state is already " ++ show state
 
 step :: EventManager -> TimeoutQueue -> IO (Bool, TimeoutQueue)
-step mgr@EventManager{..} q = do
-  (timeout, q') <- mkTimeout q
+step mgr@EventManager{..} tq = do
+  (timeout, q') <- mkTimeout tq
   I.poll emBackend timeout (onFdEvent mgr)
   state <- readIORef emState
   state `seq` return (state == Running, q')
@@ -253,7 +253,7 @@ step mgr@EventManager{..} q = do
   mkTimeout :: TimeoutQueue -> IO (Timeout, TimeoutQueue)
   mkTimeout q = do
       now <- getCurrentTime
-      newTimeouts <- atomicModifyIORef emTimeouts $ \q -> ([], q)
+      newTimeouts <- atomicModifyIORef emTimeouts $ \q' -> ([], q')
       let (expired, q') = Q.atMost now (applyTimeoutEdits q newTimeouts)
       sequence_ $ map Q.value expired
       let timeout = case Q.minView q' of

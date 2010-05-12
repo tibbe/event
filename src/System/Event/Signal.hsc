@@ -70,7 +70,7 @@ blockAllSignals = do
     sigProcMask sigSetMask blocked nullPtr
   
 loop :: SignalManager -> IO ()
-loop mgr@SignalManager{..} =
+loop SignalManager{..} =
   runInBoundThread $ do
     withForeignPtr smThread c_thread_self
     alloca $ alloca . go
