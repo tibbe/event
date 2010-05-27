@@ -71,7 +71,7 @@ data Timeout = Timeout {-# UNPACK #-} !Double
 
 -- | Event notification backend.
 data Backend = forall a. Backend {
-      _beState :: {-# UNPACK #-} !a
+      _beState :: !a
 
     -- | Poll backend for new events.  The provided callback is called
     -- once per file descriptor with new events.

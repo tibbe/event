@@ -69,7 +69,7 @@ threadWaitWrite fd
   | otherwise = Conc.threadWaitWrite fd 
 
 data Managing a = None
-                | Running {-# UNPACK #-} !a
+                | Running !a
 
 threadWait :: Event -> Fd -> IO ()
 threadWait evt fd = do

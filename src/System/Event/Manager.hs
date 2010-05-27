@@ -78,7 +78,7 @@ import qualified System.Event.Poll   as Poll
 data FdData = FdData {
       fdKey       :: {-# UNPACK #-} !FdKey
     , fdEvents    :: {-# UNPACK #-} !Event
-    , _fdCallback :: {-# UNPACK #-} !IOCallback
+    , _fdCallback :: !IOCallback
     } deriving (Show)
 
 -- | A file descriptor registration cookie.
@@ -141,7 +141,7 @@ applyTimeoutEdits = foldl' (flip ($))
 
 -- | The event manager state.
 data EventManager = EventManager
-    { emBackend      :: {-# UNPACK #-} !Backend
+    { emBackend      :: !Backend
     , emFds          :: {-# UNPACK #-} !(MVar (IM.IntMap [FdData]))
     , emTimeouts     :: {-# UNPACK #-} !(IORef [TimeoutEdit])
     , emState        :: {-# UNPACK #-} !(IORef State)
