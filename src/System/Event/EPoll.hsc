@@ -19,6 +19,8 @@ import qualified System.Event.Internal as E
 
 #include "EventConfig.h"
 #if !defined(HAVE_EPOLL)
+import Prelude
+
 new :: IO E.Backend
 new = error "EPoll back end not implemented for this platform"
 

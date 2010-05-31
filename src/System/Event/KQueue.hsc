@@ -7,12 +7,12 @@ module System.Event.KQueue
     , available
     ) where
 
-import Prelude
-import System.Posix.Internals (c_close)
 import qualified System.Event.Internal as E
 
 #include "EventConfig.h"
 #if !defined(HAVE_KQUEUE)
+import Prelude
+
 new :: IO E.Backend
 new = error "KQueue back end not implemented for this platform"
 
@@ -32,6 +32,7 @@ import Foreign.Ptr (Ptr, nullPtr)
 import Foreign.Storable (Storable(..))
 import Prelude hiding (filter)
 import System.Event.Internal (Timeout(..))
+import System.Posix.Internals (c_close)
 import System.Posix.Types (Fd(..))
 import qualified System.Event.Array as A
 
@@ -285,7 +286,7 @@ toEvent :: Filter -> E.Event
 toEvent (Filter f)
     | f == (#const EVFILT_READ) = E.evtRead
     | f == (#const EVFILT_WRITE) = E.evtWrite
-    | otherwise = error $ "toEvent: unknonwn filter " ++ show f
+    | otherwise = error $ "toEvent: unknown filter " ++ show f
 
 foreign import ccall unsafe "kqueue"
     c_kqueue :: IO CInt
