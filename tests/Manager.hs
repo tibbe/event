@@ -24,8 +24,10 @@ import qualified Test.Framework.Providers.HUnit as F
 withBackend :: IO Backend -> (EventManager -> IO a) -> IO a
 withBackend what act = do
   mgr <- newWith =<< what
-  forkIO $ loop mgr
+  done <- newEmptyMVar
+  forkIO $ loop mgr >> putMVar done ()
   a <- act mgr `finally` shutdown mgr
+  takeMVar done
   assertBool "finished" =<< finished mgr
   return a
 

@@ -12,7 +12,6 @@ module System.Event.Manager
       -- * Running
     , finished
     , loop
-    , init
     , step
     , shutdown
     , wakeManager
@@ -42,15 +41,15 @@ module System.Event.Manager
 ------------------------------------------------------------------------
 -- Imports
 
-import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newEmptyMVar,
-                                newMVar, putMVar, readMVar, takeMVar)
+import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar,
+                                readMVar)
 import Control.Exception (finally)
 import Control.Monad (forM_, liftM, when)
 import Data.IORef (IORef, atomicModifyIORef, mkWeakIORef, newIORef, readIORef,
                    writeIORef)
 import Data.List (foldl')
 import Data.Monoid (mconcat, mempty)
-import Prelude hiding (init)
+import Prelude
 import System.Event.Clock (getCurrentTime)
 import System.Event.Control
 import System.Event.Internal (Backend, Event, evtRead, evtWrite, Timeout(..))
@@ -101,6 +100,7 @@ type TimeoutCallback = IO ()
 
 data State = Created
            | Running
+           | Dying
            | Finished
              deriving (Eq, Show)
 
@@ -147,7 +147,6 @@ data EventManager = EventManager
     , emState        :: {-# UNPACK #-} !(IORef State)
     , emUniqueSource :: {-# UNPACK #-} !UniqueSource
     , emControl      :: {-# UNPACK #-} !Control
-    , emFinished     :: {-# UNPACK #-} !(MVar ())
     }
 
 ------------------------------------------------------------------------
@@ -187,25 +186,22 @@ newWith be = do
                when (st /= Finished) $ do
                  I.delete be
                  closeControl ctrl
-  fini <- newEmptyMVar
   let mgr = EventManager { emBackend = be
                          , emFds = iofds
                          , emTimeouts = timeouts
                          , emState = state
                          , emUniqueSource = us
                          , emControl = ctrl
-                         , emFinished = fini
                          }
   _ <- registerFd_ mgr (handleControlEvent mgr) (controlReadFd ctrl) evtRead
   _ <- registerFd_ mgr (handleControlEvent mgr) (wakeupReadFd ctrl) evtRead
   return mgr
 
+-- | Asynchronously shuts down the event manager, if running.
 shutdown :: EventManager -> IO ()
 shutdown mgr = do
-  state <- readIORef (emState mgr)
-  when (state == Running) $ do
-    sendDie (emControl mgr)
-    takeMVar (emFinished mgr)
+  state <- atomicModifyIORef (emState mgr) $ \s -> (Dying, s)
+  when (state == Running) $ sendDie (emControl mgr)
 
 finished :: EventManager -> IO Bool
 finished mgr = (== Finished) `liftM` readIORef (emState mgr)
@@ -215,7 +211,6 @@ cleanup EventManager{..} = do
   writeIORef emState Finished
   I.delete emBackend
   closeControl emControl
-  putMVar emFinished ()
 
 ------------------------------------------------------------------------
 -- Event loop
@@ -226,19 +221,18 @@ cleanup EventManager{..} = do
 -- closes all of its control resources when it finishes.
 loop :: EventManager -> IO ()
 loop mgr@EventManager{..} = do
-  init mgr
-  go Q.empty `finally` cleanup mgr
+  state <- atomicModifyIORef emState $ \s -> case s of
+    Created -> (Running, s)
+    _       -> (s, s)
+  case state of
+    Created -> go Q.empty `finally` cleanup mgr
+    Dying   -> cleanup mgr
+    _       -> do cleanup mgr
+                  error $ "System.Event.Manager.loop: state is already " ++
+                      show state
  where
   go q = do (running, q') <- step mgr q
             when running $ go q'
-
-init :: EventManager -> IO ()
-init EventManager{..} = do
-  state <- atomicModifyIORef emState $ \s -> case s of
-                                               Created -> (Running, s)
-                                               _       -> (s, s)
-  when (state /= Created) .
-    error $ "System.Event.Manager.init: state is already " ++ show state
 
 step :: EventManager -> TimeoutQueue -> IO (Bool, TimeoutQueue)
 step mgr@EventManager{..} tq = do

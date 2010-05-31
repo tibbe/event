@@ -9,7 +9,6 @@ module System.Event
     , loop
 
     -- ** Stepwise running
-    , init
     , step
     , shutdown
 
