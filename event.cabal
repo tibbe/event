@@ -37,6 +37,7 @@ library
     System.Event.Manager
     System.Event.PSQ
     System.Event.Poll
+    System.Event.Select
     System.Event.Signal
     System.Event.Unique
 

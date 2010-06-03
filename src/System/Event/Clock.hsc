@@ -1,6 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 
-module System.Event.Clock (getCurrentTime) where
+module System.Event.Clock (CTimeval(..), getCurrentTime) where
 
 #include <sys/time.h>
 

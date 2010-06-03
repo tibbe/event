@@ -18,6 +18,7 @@ import Test.HUnit (Assertion, assertBool, assertEqual)
 import qualified System.Event.EPoll as EPoll
 import qualified System.Event.KQueue as KQueue
 import qualified System.Event.Poll as Poll
+import qualified System.Event.Select as Select
 import qualified Test.Framework as F
 import qualified Test.Framework.Providers.HUnit as F
 
@@ -95,4 +96,5 @@ tests = F.testGroup "System.Event.Manager" [ group | (available, group) <- [
           (EPoll.available,  F.testGroup "EPoll"  $ backendTests EPoll.new)
         , (KQueue.available, F.testGroup "KQueue" $ backendTests KQueue.new)
         , (Poll.available,   F.testGroup "Poll"   $ backendTests Poll.new)
+        , (Select.available, F.testGroup "Select" $ backendTests Select.new)
         ], available]
