@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving, NoImplicitPrelude #-}
 module System.Event.Unique
     (
       UniqueSource
@@ -8,8 +8,10 @@ module System.Event.Unique
     ) where
 
 import Data.Int (Int64)
+import GHC.Base
 import GHC.Conc (TVar, atomically, newTVarIO, readTVar, writeTVar)
-import Prelude
+import GHC.Num (Num(..))
+import GHC.Show (Show(..))
 
 -- We used to use IORefs here, but Simon switched us to STM when we
 -- found that our use of atomicModifyIORef was subject to a severe RTS
@@ -30,9 +32,9 @@ newSource :: IO UniqueSource
 newSource = US `fmap` newTVarIO 0
 
 newUnique :: UniqueSource -> IO Unique
-newUnique (US ref) = atomically $ do 
+newUnique (US ref) = atomically $ do
   u <- readTVar ref
   let !u' = u+1
   writeTVar ref u'
-  return $! Unique u'
+  return $ Unique u'
 {-# INLINE newUnique #-}

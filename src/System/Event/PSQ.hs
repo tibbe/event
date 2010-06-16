@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, NoImplicitPrelude #-}
 
 -- Copyright (c) 2008, Ralf Hinze
 -- All rights reserved.
@@ -87,10 +87,11 @@ module System.Event.PSQ
     , atMost
     ) where
 
+import Data.Maybe (Maybe(..))
+import GHC.Base
+import GHC.Num (Num(..))
+import GHC.Show (Show(showsPrec))
 import System.Event.Unique (Unique)
-
-import Prelude hiding (lookup, null, foldl, foldr)
-import qualified Prelude as P
 
 -- | @E k p@ binds the key @k@ with the priority @p@.
 data Elem a = E
@@ -208,7 +209,7 @@ adjust f k q0 =  go q0
 -- tuples.  If the list contains more than one priority and value for
 -- the same key, the last priority and value for the key is retained.
 fromList :: [Elem a] -> PSQ a
-fromList = P.foldr (\(E k p v) q -> insert k p v q) empty
+fromList = foldr (\(E k p v) q -> insert k p v q) empty
 
 -- | /O(n)/ Convert to a list of key/priority/value tuples.
 toList :: PSQ a -> [Elem a]

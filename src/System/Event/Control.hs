@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface, ScopedTypeVariables #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, NoImplicitPrelude,
+    ScopedTypeVariables #-}
 
 module System.Event.Control
     (
@@ -21,12 +22,17 @@ module System.Event.Control
 
 #include "EventConfig.h"
 
+import GHC.Base
+import GHC.Enum (Enum(..))
+import GHC.Err (undefined)
+import GHC.Num (Num(..))
+import GHC.Real (fromIntegral)
+import GHC.Show (Show)
 import Foreign.C.Error (throwErrnoIfMinus1_)
 import Foreign.C.Types (CInt)
 import Foreign.Marshal (alloca, allocaBytes)
 import Foreign.Marshal.Array (allocaArray)
 import Foreign.Storable (peek, peekElemOff, poke)
-import Prelude
 import System.Posix.Internals (c_close, c_pipe, c_read, c_write,
                                setCloseOnExec, setNonBlockingFD)
 import System.Posix.Types (Fd)

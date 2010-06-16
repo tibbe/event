@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE BangPatterns, CPP, ForeignFunctionInterface, NoImplicitPrelude #-}
 
 module System.Event.Array
     (
@@ -23,14 +23,20 @@ module System.Event.Array
     , useAsPtr
     ) where
 
-import Control.Monad (when)
+import Control.Monad hiding (forM_)
 import Data.IORef (IORef, atomicModifyIORef, newIORef, readIORef, writeIORef)
+import Data.Maybe
 import Foreign.C.Types (CSize)
 import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
 import Foreign.Ptr (Ptr, nullPtr, plusPtr)
 import Foreign.Storable (Storable(..))
+import GHC.Base
+import GHC.Err (undefined)
+import GHC.Float (logBase)
 import GHC.ForeignPtr (mallocPlainForeignPtrBytes, newForeignPtr_)
-import Prelude hiding (concat, length)
+import GHC.Num (Num(..))
+import GHC.Real ((^), ceiling, fromIntegral, realToFrac)
+import GHC.Show (show)
 
 #define BOUNDS_CHECKING 1
 

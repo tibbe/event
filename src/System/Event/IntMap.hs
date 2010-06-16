@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, MagicHash #-}
+{-# LANGUAGE CPP, MagicHash, NoImplicitPrelude #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  System.Event.IntMap
@@ -67,11 +67,16 @@ module System.Event.IntMap
     , keys
     ) where
 
-import Prelude hiding (lookup, map, filter, foldr, foldl, null)
 import Data.Bits
 
+import Data.Maybe (Maybe(..))
+import GHC.Base hiding (foldr)
+import GHC.Num (Num(..))
+import GHC.Real (fromIntegral)
+import GHC.Show (Show(showsPrec), showParen, shows, showString)
+
 #if __GLASGOW_HASKELL__ >= 503
-import GHC.Exts (Word(..), Int(..), shiftRL#)
+import GHC.Word (Word(..))
 #elif __GLASGOW_HASKELL__
 import Word
 import GlaExts (Word(..), Int(..), shiftRL#)

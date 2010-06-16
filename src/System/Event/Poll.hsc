@@ -1,4 +1,5 @@
-{-# LANGUAGE ForeignFunctionInterface, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ForeignFunctionInterface, GeneralizedNewtypeDeriving,
+    NoImplicitPrelude #-}
 
 module System.Event.Poll
     (
@@ -18,15 +19,22 @@ available = False
 #else
 #include <poll.h>
 
-import Control.Concurrent.MVar (MVar, newMVar, swapMVar, withMVar)
-import Control.Monad (liftM, liftM2, unless)
+import Control.Concurrent.MVar (MVar, newMVar, swapMVar)
+import Control.Monad ((=<<), liftM, liftM2, unless)
 import Data.Bits (Bits, (.|.), (.&.))
+import Data.Maybe (Maybe(..))
 import Data.Monoid (Monoid(..))
 import Foreign.C.Types (CInt, CShort, CULong)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable(..))
-import Prelude
+import GHC.Base
+import GHC.Conc (withMVar)
+import GHC.Err (undefined)
+import GHC.Num (Num(..))
+import GHC.Real (ceiling, fromIntegral)
+import GHC.Show (Show)
 import System.Posix.Types (Fd(..))
+
 import qualified System.Event.Array as A
 import qualified System.Event.Internal as E
 
@@ -127,7 +135,8 @@ instance Storable PollFd where
       fd <- #{peek struct pollfd, fd} ptr
       events <- #{peek struct pollfd, events} ptr
       revents <- #{peek struct pollfd, revents} ptr
-      return $! PollFd fd events revents
+      let !pollFd = PollFd fd events revents
+      return pollFd
 
     poke ptr p = do
       #{poke struct pollfd, fd} ptr (pfdFd p)

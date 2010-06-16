@@ -1,4 +1,5 @@
-{-# LANGUAGE ForeignFunctionInterface, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ForeignFunctionInterface, GeneralizedNewtypeDeriving,
+    NoImplicitPrelude #-}
 
 --
 -- | A binding to the epoll I/O event notification facility
@@ -19,7 +20,7 @@ import qualified System.Event.Internal as E
 
 #include "EventConfig.h"
 #if !defined(HAVE_EPOLL)
-import Prelude
+import GHC.Base
 
 new :: IO E.Backend
 new = error "EPoll back end not implemented for this platform"
@@ -40,12 +41,17 @@ import Foreign.C.Types (CInt)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable(..))
-import Prelude
+import GHC.Base
+import GHC.Err (undefined)
+import GHC.Num (Num(..))
+import GHC.Real (ceiling, fromIntegral)
+import GHC.Show (Show)
 import System.Posix.Internals (c_close)
 #if !defined(HAVE_EPOLL_CREATE1)
 import System.Posix.Internals (setCloseOnExec)
 #endif
 import System.Posix.Types (Fd(..))
+
 import qualified System.Event.Array    as A
 import           System.Event.Internal (Timeout(..))
 
@@ -63,7 +69,8 @@ new :: IO E.Backend
 new = do
   epfd <- epollCreate
   evts <- A.new 64
-  return $! E.backend poll modifyFd delete (EPoll epfd evts)
+  let !be = E.backend poll modifyFd delete (EPoll epfd evts)
+  return be
 
 delete :: EPoll -> IO ()
 delete be = do
@@ -115,7 +122,8 @@ instance Storable Event where
     peek ptr = do
         ets <- #{peek struct epoll_event, events} ptr
         ed  <- #{peek struct epoll_event, data.fd}   ptr
-        return $! Event (EventType ets) ed
+        let !ev = Event (EventType ets) ed
+        return ev
 
     poke ptr e = do
         #{poke struct epoll_event, events} ptr (unEventType $ eventTypes e)
@@ -157,7 +165,8 @@ epollCreate = do
         c_epoll_create 256 -- argument is ignored
   setCloseOnExec fd
 #endif
-  return $! EPollFd fd
+  let !epollFd = EPollFd fd
+  return epollFd
 
 epollControl :: EPollFd -> ControlOp -> Fd -> Ptr Event -> IO ()
 epollControl (EPollFd epfd) (ControlOp op) (Fd fd) event =

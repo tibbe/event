@@ -1,5 +1,5 @@
-{-# LANGUAGE BangPatterns, CPP, ExistentialQuantification, RecordWildCards,
-    TypeSynonymInstances #-}
+{-# LANGUAGE BangPatterns, CPP, ExistentialQuantification, NoImplicitPrelude,
+    RecordWildCards, TypeSynonymInstances #-}
 module System.Event.Manager
     ( -- * Types
       EventManager
@@ -41,20 +41,24 @@ module System.Event.Manager
 ------------------------------------------------------------------------
 -- Imports
 
-import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar,
-                                readMVar)
+import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar, readMVar)
 import Control.Exception (finally)
-import Control.Monad (forM_, liftM, when)
+import Control.Monad ((=<<), forM_, liftM, sequence_, when)
 import Data.IORef (IORef, atomicModifyIORef, mkWeakIORef, newIORef, readIORef,
                    writeIORef)
-import Data.List (foldl')
+import Data.Maybe (Maybe(..))
 import Data.Monoid (mconcat, mempty)
-import Prelude
+import GHC.Base
+import GHC.List (filter)
+import GHC.Num (Num(..))
+import GHC.Real ((/), fromIntegral, fromRational)
+import GHC.Show (Show(..))
 import System.Event.Clock (getCurrentTime)
 import System.Event.Control
 import System.Event.Internal (Backend, Event, evtRead, evtWrite, Timeout(..))
 import System.Event.Unique (Unique, UniqueSource, newSource, newUnique)
 import System.Posix.Types (Fd)
+
 import qualified System.Event.IntMap as IM
 import qualified System.Event.Internal as I
 import qualified System.Event.PSQ as Q
@@ -245,15 +249,16 @@ step mgr@EventManager{..} tq = do
   mkTimeout q = do
       now <- getCurrentTime
       applyEdits <- atomicModifyIORef emTimeouts $ \f -> (id, f)
-      let (expired, q') = Q.atMost now $! (applyEdits q)
+      let !q'            = applyEdits q
+          (expired, q'') = Q.atMost now q'
       sequence_ $ map Q.value expired
-      let timeout = case Q.minView q' of
+      let timeout = case Q.minView q'' of
             Nothing             -> Forever
             Just (Q.E _ t _, _) ->
                 -- This value will always be positive since the call
                 -- to 'atMost' above removed any timeouts <= 'now'
-                Timeout $! t - now
-      return (timeout, q')
+                let t' = t - now in t' `seq` Timeout t'
+      return (timeout, q'')
 
 ------------------------------------------------------------------------
 -- Registering interest in I/O events
@@ -342,7 +347,7 @@ fdWasClosed mgr fd =
 -- | Register a timeout in the given number of milliseconds.
 registerTimeout :: EventManager -> Int -> TimeoutCallback -> IO TimeoutKey
 registerTimeout mgr ms cb = do
-  key <- newUnique (emUniqueSource mgr)
+  !key <- newUnique (emUniqueSource mgr)
   if ms <= 0 then cb
     else do
       now <- getCurrentTime
@@ -356,7 +361,7 @@ registerTimeout mgr ms cb = do
       atomicModifyIORef (emTimeouts mgr) $ \f ->
           let f' = (Q.insert key expTime cb) . f in (f', ())
       wakeManager mgr
-  return $! TK key
+  return $ TK key
 
 unregisterTimeout :: EventManager -> TimeoutKey -> IO ()
 unregisterTimeout mgr (TK key) = do

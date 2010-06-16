@@ -7,7 +7,10 @@ module System.Event.Clock (getCurrentTime) where
 import Foreign (Ptr, Storable(..), nullPtr, with)
 import Foreign.C.Error (throwErrnoIfMinus1_)
 import Foreign.C.Types (CInt, CLong)
-import Prelude
+import GHC.Base
+import GHC.Err
+import GHC.Num
+import GHC.Real
 
 -- TODO: Implement this for Windows.
 
@@ -17,7 +20,8 @@ getCurrentTime = do
     tv <- with (CTimeval 0 0) $ \tvptr -> do
         throwErrnoIfMinus1_ "gettimeofday" (gettimeofday tvptr nullPtr)
         peek tvptr
-    return $! fromIntegral (sec tv) + fromIntegral (usec tv) / 1000000.0
+    let !t = fromIntegral (sec tv) + fromIntegral (usec tv) / 1000000.0
+    return t
 
 ------------------------------------------------------------------------
 -- FFI binding

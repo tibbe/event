@@ -7,11 +7,12 @@ module System.Event.KQueue
     , available
     ) where
 
+import System.Posix.Internals (c_close)
 import qualified System.Event.Internal as E
 
 #include "EventConfig.h"
 #if !defined(HAVE_KQUEUE)
-import Prelude
+import GHC.Base
 
 new :: IO E.Backend
 new = error "KQueue back end not implemented for this platform"
@@ -32,7 +33,6 @@ import Foreign.Ptr (Ptr, nullPtr)
 import Foreign.Storable (Storable(..))
 import Prelude hiding (filter)
 import System.Event.Internal (Timeout(..))
-import System.Posix.Internals (c_close)
 import System.Posix.Types (Fd(..))
 import qualified System.Event.Array as A
 
