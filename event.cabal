@@ -37,7 +37,6 @@ library
     System.Event.Manager
     System.Event.PSQ
     System.Event.Poll
-    System.Event.Signal
     System.Event.Unique
 
   build-depends:
@@ -51,8 +50,7 @@ library
 
   hs-source-dirs: src
   include-dirs: include
-  install-includes: EventConfig.h HsEvent.h
-  c-sources: cbits/eventsupport.c
+  install-includes: EventConfig.h
 
 source-repository head
   type:     git
